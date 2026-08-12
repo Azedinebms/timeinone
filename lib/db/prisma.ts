@@ -1,63 +1,60 @@
 import "server-only";
 
-import {
-  PrismaPg,
-} from "@prisma/adapter-pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
 
-import {
-  PrismaClient,
-} from "@prisma/client";
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
-const globalForPrisma =
-  globalThis as unknown as {
-    prisma?: PrismaClient;
-  };
-
-function createPrisma(): PrismaClient {
-  const connectionString =
-    process.env.DATABASE_URL;
+function createPrismaClient(): PrismaClient {
+  const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(
-      "DATABASE_URL is not defined.",
+      "[TimeInOne] DATABASE_URL is missing. Configure DATABASE_URL before starting the application.",
     );
   }
 
-  const adapter =
-    new PrismaPg({
-      connectionString,
-    });
+  const adapter = new PrismaPg({
+    connectionString,
+    max: 2,
+    connectionTimeoutMillis: 15_000,
+    idleTimeoutMillis: 10_000,
+  });
 
   return new PrismaClient({
     adapter,
   });
 }
 
-export const getPrisma =
-  (): PrismaClient => {
-    if (
-      globalForPrisma.prisma
-    ) {
-      return globalForPrisma.prisma;
-    }
+export const prisma =
+  globalForPrisma.prisma ??
+  createPrismaClient();
 
-    const prisma =
-      createPrisma();
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
-    if (
-      process.env.NODE_ENV !==
-      "production"
-    ) {
-      globalForPrisma.prisma =
-        prisma;
-    }
+/**
+ * Compatibility helper.
+ *
+ * Existing repositories can continue using:
+ *
+ * const prisma = await getPrismaAsync();
+ *
+ * This avoids having to modify all repositories immediately.
+ */
+export async function getPrismaAsync(): Promise<PrismaClient> {
+  return prisma;
+}
 
-    return prisma;
-  };
+/**
+ * Compatibility helper for code that previously
+ * used the synchronous Cloudflare helper.
+ */
+export function getPrisma(): PrismaClient {
+  return prisma;
+}
 
-export const getPrismaAsync =
-  async (): Promise<
-    PrismaClient
-  > => {
-    return getPrisma();
-  };
+export default prisma;
