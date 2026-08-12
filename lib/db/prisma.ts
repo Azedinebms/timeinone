@@ -1,27 +1,38 @@
 import "server-only";
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import {
+  PrismaPg,
+} from "@prisma/adapter-pg";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+import {
+  PrismaClient,
+} from "@/lib/generated/prisma/client";
 
-function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
+const globalForPrisma =
+  globalThis as unknown as {
+    prisma?: PrismaClient;
+  };
+
+function createPrismaClient():
+  PrismaClient {
+  const connectionString =
+    process.env.DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(
-      "[TimeInOne] DATABASE_URL is missing. Configure DATABASE_URL before starting the application.",
+      "[TimeInOne] DATABASE_URL is missing.",
     );
   }
 
-  const adapter = new PrismaPg({
-    connectionString,
-    max: 2,
-    connectionTimeoutMillis: 15_000,
-    idleTimeoutMillis: 10_000,
-  });
+  const adapter =
+    new PrismaPg({
+      connectionString,
+      max: 2,
+      connectionTimeoutMillis:
+        15_000,
+      idleTimeoutMillis:
+        10_000,
+    });
 
   return new PrismaClient({
     adapter,
@@ -32,28 +43,21 @@ export const prisma =
   globalForPrisma.prisma ??
   createPrismaClient();
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+if (
+  process.env.NODE_ENV !==
+  "production"
+) {
+  globalForPrisma.prisma =
+    prisma;
 }
 
-/**
- * Compatibility helper.
- *
- * Existing repositories can continue using:
- *
- * const prisma = await getPrismaAsync();
- *
- * This avoids having to modify all repositories immediately.
- */
-export async function getPrismaAsync(): Promise<PrismaClient> {
+export function getPrisma():
+  PrismaClient {
   return prisma;
 }
 
-/**
- * Compatibility helper for code that previously
- * used the synchronous Cloudflare helper.
- */
-export function getPrisma(): PrismaClient {
+export async function getPrismaAsync():
+  Promise<PrismaClient> {
   return prisma;
 }
 

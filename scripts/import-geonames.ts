@@ -8,7 +8,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import {
   PrismaClient,
-} from "@prisma/client";
+} from "../lib/generated/prisma/client";
 
 const COUNTRY_FILE_PATH = resolve(
   process.cwd(),

@@ -6,7 +6,7 @@ import {
 
 import {
   PrismaClient,
-} from "@prisma/client";
+} from "../lib/generated/prisma/client";
 
 type SeedCountryRecord = {
   id: number;
