@@ -1,26 +1,774 @@
 @import "tailwindcss";
 
+/*
+ * TimeInOne Design System
+ *
+ * Palette claire inspirée des interfaces
+ * SaaS modernes, sans copier une marque.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* Page */
+  --background: #f4f7fd;
+  --foreground: #111c33;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-soft: #f8faff;
+  --surface-muted: #edf2fb;
+  --surface-elevated: #ffffff;
+
+  /* Borders */
+  --border: #dde5f2;
+  --border-soft: #e9eef7;
+  --border-strong: #cbd6e7;
+
+  /* Typography */
+  --text-primary: #111c33;
+  --text-secondary: #52627a;
+  --text-muted: #7b8ba3;
+  --text-subtle: #9aa8bb;
+  --text-inverse: #ffffff;
+
+  /* Brand */
+  --primary: #315efb;
+  --primary-hover: #244de0;
+  --primary-active: #1e42c4;
+  --primary-soft: #eaf0ff;
+  --primary-muted: #cfdcff;
+
+  /* Accent */
+  --accent: #7557ff;
+  --accent-soft: #f0edff;
+
+  /* Semantic colors */
+  --success: #0ca678;
+  --success-soft: #e6f8f2;
+
+  --warning: #f59f00;
+  --warning-soft: #fff7df;
+
+  --danger: #e5484d;
+  --danger-soft: #fff0f0;
+
+  --info: #1687ff;
+  --info-soft: #eaf5ff;
+
+  /* Shadows */
+  --shadow-sm:
+    0 1px 2px rgb(15 23 42 / 0.04);
+
+  --shadow-md:
+    0 8px 24px rgb(31 50 81 / 0.08);
+
+  --shadow-lg:
+    0 18px 50px rgb(31 50 81 / 0.12);
+
+  --shadow-primary:
+    0 12px 30px rgb(49 94 251 / 0.22);
+
+  /* Focus */
+  --focus-ring:
+    0 0 0 3px rgb(49 94 251 / 0.18);
+
+  /* Radius */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
 }
 
+/*
+ * Tailwind v4 semantic tokens.
+ *
+ * Ils permettent progressivement
+ * d'utiliser des classes comme :
+ *
+ * bg-background
+ * bg-surface
+ * text-primary
+ * text-secondary
+ * border-border
+ * bg-primary
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background:
+    var(--background);
+
+  --color-foreground:
+    var(--foreground);
+
+  --color-surface:
+    var(--surface);
+
+  --color-surface-soft:
+    var(--surface-soft);
+
+  --color-surface-muted:
+    var(--surface-muted);
+
+  --color-surface-elevated:
+    var(--surface-elevated);
+
+  --color-border:
+    var(--border);
+
+  --color-border-soft:
+    var(--border-soft);
+
+  --color-border-strong:
+    var(--border-strong);
+
+  --color-text-primary:
+    var(--text-primary);
+
+  --color-text-secondary:
+    var(--text-secondary);
+
+  --color-text-muted:
+    var(--text-muted);
+
+  --color-text-subtle:
+    var(--text-subtle);
+
+  --color-text-inverse:
+    var(--text-inverse);
+
+  --color-primary:
+    var(--primary);
+
+  --color-primary-hover:
+    var(--primary-hover);
+
+  --color-primary-active:
+    var(--primary-active);
+
+  --color-primary-soft:
+    var(--primary-soft);
+
+  --color-primary-muted:
+    var(--primary-muted);
+
+  --color-accent:
+    var(--accent);
+
+  --color-accent-soft:
+    var(--accent-soft);
+
+  --color-success:
+    var(--success);
+
+  --color-success-soft:
+    var(--success-soft);
+
+  --color-warning:
+    var(--warning);
+
+  --color-warning-soft:
+    var(--warning-soft);
+
+  --color-danger:
+    var(--danger);
+
+  --color-danger-soft:
+    var(--danger-soft);
+
+  --color-info:
+    var(--info);
+
+  --color-info-soft:
+    var(--info-soft);
+
+  --font-sans:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  --font-mono:
+    "Cascadia Code",
+    "SFMono-Regular",
+    Consolas,
+    monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background:
+    var(--background);
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100%;
+  margin: 0;
+
+  background:
+    var(--background);
+
+  color:
+    var(--foreground);
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  text-rendering:
+    optimizeLegibility;
+
+  -webkit-font-smoothing:
+    antialiased;
+
+  -moz-osx-font-smoothing:
+    grayscale;
+}
+
+::selection {
+  background:
+    var(--primary-muted);
+
+  color:
+    var(--text-primary);
+}
+
+a {
+  text-decoration:
+    none;
+}
+
+button,
+input,
+select,
+textarea {
+  font:
+    inherit;
+}
+
+button {
+  cursor:
+    pointer;
+}
+
+button:disabled {
+  cursor:
+    not-allowed;
+}
+
+input,
+select,
+textarea {
+  color:
+    var(--text-primary);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color:
+    var(--text-subtle);
+}
+
+:focus-visible {
+  outline:
+    none;
+
+  box-shadow:
+    var(--focus-ring);
+}
+
+/*
+ * Scrollbars
+ */
+
+* {
+  scrollbar-width:
+    thin;
+
+  scrollbar-color:
+    var(--border-strong)
+    var(--surface-soft);
+}
+
+*::-webkit-scrollbar {
+  width:
+    10px;
+
+  height:
+    10px;
+}
+
+*::-webkit-scrollbar-track {
+  background:
+    var(--surface-soft);
+}
+
+*::-webkit-scrollbar-thumb {
+  border:
+    2px solid
+    var(--surface-soft);
+
+  border-radius:
+    999px;
+
+  background:
+    var(--border-strong);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    var(--text-subtle);
+}
+
+/*
+ * Reusable utility classes
+ */
+
+.timeinone-card {
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    var(--radius-xl);
+
+  background:
+    var(--surface);
+
+  box-shadow:
+    var(--shadow-sm);
+}
+
+.timeinone-card-elevated {
+  border:
+    1px solid
+    var(--border-soft);
+
+  border-radius:
+    var(--radius-xl);
+
+  background:
+    var(--surface-elevated);
+
+  box-shadow:
+    var(--shadow-md);
+}
+
+.timeinone-panel {
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    var(--radius-lg);
+
+  background:
+    var(--surface-soft);
+}
+
+.timeinone-primary-button {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  border:
+    1px solid
+    transparent;
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--primary);
+
+  color:
+    var(--text-inverse);
+
+  font-weight:
+    700;
+
+  box-shadow:
+    var(--shadow-primary);
+
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.timeinone-primary-button:hover {
+  background:
+    var(--primary-hover);
+
+  transform:
+    translateY(-1px);
+}
+
+.timeinone-primary-button:active {
+  background:
+    var(--primary-active);
+
+  transform:
+    translateY(0);
+}
+
+.timeinone-secondary-button {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--surface);
+
+  color:
+    var(--text-primary);
+
+  font-weight:
+    700;
+
+  box-shadow:
+    var(--shadow-sm);
+
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.timeinone-secondary-button:hover {
+  border-color:
+    var(--primary-muted);
+
+  background:
+    var(--primary-soft);
+
+  color:
+    var(--primary);
+
+  transform:
+    translateY(-1px);
+}
+
+/*
+ * Toast animations
+ *
+ * Les anciens noms sont conservés
+ * pour ne pas casser les composants
+ * déjà développés.
+ */
+
+@keyframes atlas-toast-in {
+  from {
+    opacity:
+      0;
+
+    transform:
+      translate3d(
+        24px,
+        -8px,
+        0
+      )
+      scale(
+        0.97
+      );
+  }
+
+  to {
+    opacity:
+      1;
+
+    transform:
+      translate3d(
+        0,
+        0,
+        0
+      )
+      scale(
+        1
+      );
+  }
+}
+
+@keyframes atlas-toast-progress {
+  from {
+    transform:
+      scaleX(
+        1
+      );
+  }
+
+  to {
+    transform:
+      scaleX(
+        0
+      );
+  }
+}
+
+@media (
+  prefers-reduced-motion:
+    reduce
+) {
+  html {
+    scroll-behavior:
+      auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior:
+      auto !important;
+
+    animation-duration:
+      0.01ms !important;
+
+    animation-iteration-count:
+      1 !important;
+
+    transition-duration:
+      0.01ms !important;
+  }
+
+  [class*="atlas-toast-in"] {
+    animation:
+      none !important;
+  }
+}
+
+/* =========================================================
+   PRINTABLE FULL-YEAR CALENDAR
+   A4 LANDSCAPE — 12 MONTHS / ONE PAGE
+========================================================= */
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 4mm;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+
+    background: #ffffff !important;
+
+    overflow: visible !important;
+  }
+
+  /*
+   * Hide the normal website interface.
+   */
+
+ body > header,
+footer,
+.print-hidden,
+.print\:hidden {
+  display: none !important;
+}
+
+  main {
+    width: 100% !important;
+    max-width: none !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    background: #ffffff !important;
+  }
+
+  /*
+   * Printable year wrapper
+   */
+
+  #print-year-calendar {
+    width: 100% !important;
+    max-width: none !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /*
+   * Year title
+   */
+
+  #print-year-calendar > header {
+    display: block !important;
+
+    margin: 0 0 2mm !important;
+    padding: 0 !important;
+
+    text-align: center !important;
+  }
+
+  #print-year-calendar > header h1 {
+    margin: 0 !important;
+
+    color: #000000 !important;
+
+    font-size: 15px !important;
+    line-height: 1.1 !important;
+  }
+
+  #print-year-calendar > header p {
+    margin: 1mm 0 0 !important;
+
+    color: #475569 !important;
+
+    font-size: 6px !important;
+    line-height: 1 !important;
+  }
+
+  /*
+   * Force 12 months into:
+   *
+   *  January   February   March
+   *  April     May        June
+   *  July      August     September
+   *  October   November   December
+   */
+
+  .print-calendar-grid {
+    display: grid !important;
+
+    grid-template-columns:
+      repeat(
+        3,
+        minmax(0, 1fr)
+      ) !important;
+
+    grid-template-rows:
+      repeat(
+        4,
+        minmax(0, 1fr)
+      ) !important;
+
+    width: 100% !important;
+    height: 181mm !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    gap: 1.5mm !important;
+  }
+
+  /*
+   * Month card
+   */
+
+  .print-calendar-grid article {
+    min-width: 0 !important;
+    min-height: 0 !important;
+
+    height: 100% !important;
+
+    margin: 0 !important;
+
+    overflow: hidden !important;
+
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 4px !important;
+
+    box-shadow: none !important;
+    transform: none !important;
+
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /*
+   * Month header
+   */
+
+  .print-calendar-grid article header {
+    display: flex !important;
+
+    min-height: 0 !important;
+
+    margin: 0 !important;
+    padding: 2px 5px !important;
+  }
+
+  .print-calendar-grid article header h2 {
+    margin: 0 !important;
+
+    font-size: 7px !important;
+    line-height: 1 !important;
+  }
+
+  .print-calendar-grid article header p {
+    margin: 1px 0 0 !important;
+
+    font-size: 4.5px !important;
+    line-height: 1 !important;
+  }
+
+  .print-calendar-grid article header span {
+    padding: 1px 3px !important;
+
+    font-size: 4.5px !important;
+    line-height: 1 !important;
+  }
+
+  /*
+   * Calendar cells
+   *
+   * Screen uses aspect-square.
+   * Printing must use a fixed small height.
+   */
+
+  .print-calendar-grid article .aspect-square {
+    aspect-ratio: auto !important;
+
+    height: 5.5mm !important;
+    min-height: 0 !important;
+  }
+
+  /*
+   * Preserve calendar colors in PDF / printer.
+   */
+
+  .print-calendar-grid article * {
+    -webkit-print-color-adjust:
+      exact !important;
+
+    print-color-adjust:
+      exact !important;
+  }
+
+  .print-calendar-grid article button,
+  .print-calendar-grid article div,
+  .print-calendar-grid article span,
+  .print-calendar-grid article p {
+    line-height: 1 !important;
+  }
 }

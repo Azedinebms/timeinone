@@ -1,0 +1,62 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Country {
+  id        Int      @id @default(autoincrement())
+  name      String
+  iso2      String   @unique @db.VarChar(2)
+  iso3      String?  @unique @db.VarChar(3)
+  cities    City[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@map("countries")
+}
+
+model Timezone {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  cities    City[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@map("timezones")
+}
+
+model City {
+  id         Int      @id @default(autoincrement())
+  geonameId  Int      @unique
+  name       String
+  asciiName  String?
+  slug       String
+  latitude   Decimal? @db.Decimal(9, 6)
+  longitude  Decimal? @db.Decimal(9, 6)
+  population Int?
+  countryId  Int
+  timezoneId Int
+
+  country  Country  @relation(fields: [countryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  timezone Timezone @relation(fields: [timezoneId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([asciiName])
+  @@index([slug])
+  @@index([slug, countryId])
+  @@index([population])
+  @@index([countryId])
+  @@index([timezoneId])
+
+  @@map("cities")
+}

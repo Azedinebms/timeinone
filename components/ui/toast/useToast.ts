@@ -1,0 +1,26 @@
+"use client";
+
+import {
+  useContext,
+} from "react";
+
+import {
+  ToastContext,
+  type ToastContextValue,
+} from "./ToastProvider";
+
+export default function useToast():
+  ToastContextValue {
+  const context =
+    useContext(
+      ToastContext,
+    );
+
+  if (!context) {
+    throw new Error(
+      "useToast must be used inside ToastProvider.",
+    );
+  }
+
+  return context;
+}
