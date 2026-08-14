@@ -21,9 +21,6 @@ const {
   contactEmail,
   operatorName,
   operatorType,
-  operatorAddress,
-  registrationNumber,
-  taxNumber,
   publicationDirector,
   hostingProvider,
   hostingAddress,
@@ -96,17 +93,7 @@ export default function LegalNoticePage() {
               {operatorType}
             </LegalDefinition>
 
-            <LegalDefinition term="Registered address">
-              {operatorAddress}
-            </LegalDefinition>
 
-            <LegalDefinition term="Registration number">
-              {registrationNumber}
-            </LegalDefinition>
-
-            <LegalDefinition term="Tax identifier">
-              {taxNumber}
-            </LegalDefinition>
 
             <LegalDefinition term="Contact email">
               {contactEmail}
@@ -134,9 +121,11 @@ export default function LegalNoticePage() {
               {hostingProvider}
             </LegalDefinition>
 
-            <LegalDefinition term="Address">
-              {hostingAddress}
-            </LegalDefinition>
+            {hostingAddress && (
+              <LegalDefinition term="Address">
+                {hostingAddress}
+              </LegalDefinition>
+            )}
 
             <LegalDefinition term="Website">
               {hostingWebsite}
@@ -172,7 +161,7 @@ export default function LegalNoticePage() {
             Governments and authorities
             may change UTC offsets,
             daylight-saving rules or
-            effective dates. Atlas
+            effective dates. TimeInOne
             cannot guarantee that every
             result will remain accurate
             after an unannounced or
@@ -197,7 +186,7 @@ export default function LegalNoticePage() {
             Unless otherwise indicated,
             the original interface,
             software, visual identity and
-            editorial content of Project
+            editorial content of
             TimeInOne are owned by or
             licensed to the publisher.
           </LegalParagraph>
@@ -217,8 +206,8 @@ export default function LegalNoticePage() {
           title="Third-party standards and data"
         >
           <LegalParagraph>
-            TimeInOne may rely on public or
-            licensed geographic data,
+            TimeInOne may rely on public
+            or licensed geographic data,
             IANA time-zone identifiers,
             browser time-zone
             implementations and other
@@ -256,8 +245,8 @@ export default function LegalNoticePage() {
           <LegalParagraph>
             The publisher makes
             reasonable efforts to
-            maintain TimeInOne but does not
-            guarantee uninterrupted,
+            maintain TimeInOne but does
+            not guarantee uninterrupted,
             error-free or permanently
             available operation.
           </LegalParagraph>
@@ -291,14 +280,14 @@ export default function LegalNoticePage() {
           number="11"
           title="Contact"
         >
-<Button
-  as="a"
-  href={`mailto:${contactEmail}`}
-  variant="secondary"
-  className="break-all"
->
-  {contactEmail}
-</Button>
+          <Button
+            as="a"
+            href={`mailto:${contactEmail}`}
+            variant="secondary"
+            className="break-all"
+          >
+            {contactEmail}
+          </Button>
         </LegalSection>
       </LegalDocument>
     </>

@@ -105,12 +105,13 @@ export function LegalDocument({
 }: LegalDocumentProps) {
   return (
     <InstitutionalPage
-      eyebrow={eyebrow}
-      title={title}
-      description={description}
-      updatedAt={updatedAt}
-      badge="TimeInOne legal information"
-    >
+  eyebrow={eyebrow}
+  title={title}
+  description={description}
+  updatedAt={updatedAt}
+  badge="TimeInOne legal information"
+  compact
+>
       <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
         <aside className="lg:sticky lg:top-24">
           <Card

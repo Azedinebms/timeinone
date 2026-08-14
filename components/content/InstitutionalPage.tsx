@@ -19,6 +19,8 @@ type InstitutionalPageProps = {
   updatedAt?: string;
 
   badge?: string;
+
+  compact?: boolean;
 };
 
 type InstitutionalSectionProps = {
@@ -74,28 +76,82 @@ export function InstitutionalPage({
   children,
   updatedAt,
   badge,
+  compact = false,
 }: InstitutionalPageProps) {
   return (
     <main className="min-h-screen bg-background text-text-primary">
-      <section className="relative overflow-hidden border-b border-border bg-surface">
+      <section
+        className={[
+          "relative",
+          "overflow-hidden",
+          "border-b",
+          "border-border",
+          "bg-surface",
+        ].join(" ")}
+      >
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
         >
-          <div className="absolute left-1/2 top-[-220px] h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-primary-soft blur-3xl" />
+          {compact ? (
+            <>
+              <div className="absolute left-1/2 top-[-180px] h-[300px] w-[620px] -translate-x-1/2 rounded-full bg-primary-soft opacity-80 blur-3xl" />
 
-          <div className="absolute -left-40 top-24 h-80 w-80 rounded-full bg-accent-soft opacity-80 blur-3xl" />
+              <div className="absolute -right-24 top-0 h-48 w-48 rounded-full bg-info-soft opacity-50 blur-3xl" />
+            </>
+          ) : (
+            <>
+              <div className="absolute left-1/2 top-[-220px] h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-primary-soft blur-3xl" />
 
-          <div className="absolute -right-40 top-20 h-80 w-80 rounded-full bg-info-soft opacity-80 blur-3xl" />
+              <div className="absolute -left-40 top-24 h-80 w-80 rounded-full bg-accent-soft opacity-80 blur-3xl" />
+
+              <div className="absolute -right-40 top-20 h-80 w-80 rounded-full bg-info-soft opacity-80 blur-3xl" />
+            </>
+          )}
         </div>
 
-        <div className="relative mx-auto max-w-5xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
-          <div className="mx-auto max-w-3xl text-center">
+        <div
+          className={[
+            "relative",
+            "mx-auto",
+            "max-w-5xl",
+            "px-5",
+            "sm:px-6",
+            "lg:px-8",
+
+            compact
+              ? "py-7 sm:py-8 lg:py-9"
+              : "py-16 sm:py-20 lg:py-24",
+          ].join(" ")}
+        >
+          <div
+            className={[
+              "mx-auto",
+              "text-center",
+
+              compact
+                ? "max-w-2xl"
+                : "max-w-3xl",
+            ].join(" ")}
+          >
             {badge && (
-              <div className="mb-5 flex justify-center">
+              <div
+                className={[
+                  "flex",
+                  "justify-center",
+
+                  compact
+                    ? "mb-2"
+                    : "mb-5",
+                ].join(" ")}
+              >
                 <Badge
                   variant="primary"
-                  size="md"
+                  size={
+                    compact
+                      ? "sm"
+                      : "md"
+                  }
                   dot
                 >
                   {badge}
@@ -103,20 +159,49 @@ export function InstitutionalPage({
               </div>
             )}
 
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary sm:text-xs">
               {eyebrow}
             </p>
 
-            <h1 className="mt-5 text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl">
+            <h1
+              className={[
+                "font-bold",
+                "tracking-tight",
+                "text-text-primary",
+
+                compact
+                  ? "mt-2 text-2xl sm:text-3xl lg:text-4xl"
+                  : "mt-5 text-4xl sm:text-5xl lg:text-6xl",
+              ].join(" ")}
+            >
               {title}
             </h1>
 
-            <p className="mx-auto mt-6 max-w-2xl text-base leading-8 text-text-secondary sm:text-lg">
+            <p
+              className={[
+                "mx-auto",
+                "max-w-2xl",
+                "text-text-secondary",
+
+                compact
+                  ? "mt-2 text-sm leading-6 sm:text-base"
+                  : "mt-6 text-base leading-8 sm:text-lg",
+              ].join(" ")}
+            >
               {description}
             </p>
 
             {updatedAt && (
-              <p className="mt-6 text-xs text-text-muted">
+              <p
+                className={[
+                  "text-xs",
+                  "text-text-muted",
+
+                  compact
+                    ? "mt-2"
+                    : "mt-6",
+                ].join(" ")}
+              >
                 Last updated: {updatedAt}
               </p>
             )}
@@ -124,7 +209,19 @@ export function InstitutionalPage({
         </div>
       </section>
 
-      <div className="mx-auto max-w-5xl px-5 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+      <div
+        className={[
+          "mx-auto",
+          "max-w-5xl",
+          "px-5",
+          "sm:px-6",
+          "lg:px-8",
+
+          compact
+            ? "py-7 sm:py-9 lg:py-10"
+            : "py-12 sm:py-16 lg:py-20",
+        ].join(" ")}
+      >
         {children}
       </div>
     </main>

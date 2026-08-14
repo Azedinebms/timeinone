@@ -22,7 +22,6 @@ const {
   siteUrl,
   contactEmail,
   operatorName,
-  operatorAddress,
   policyUpdatedAt,
 } =
   legalConfig;
@@ -147,9 +146,6 @@ export default function PrivacyPolicyPage() {
               {operatorName}
             </LegalDefinition>
 
-            <LegalDefinition term="Address">
-              {operatorAddress}
-            </LegalDefinition>
 
             <LegalDefinition term="Privacy contact">
               {contactEmail}
