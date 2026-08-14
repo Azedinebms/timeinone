@@ -38,6 +38,19 @@ type ContactFormProps = {
   contactEmail: string;
 };
 
+type SubmitStatus =
+  | "idle"
+  | "sending"
+  | "success"
+  | "error"
+  | "copied";
+
+type ApiResponse = {
+  ok?: boolean;
+  field?: keyof ContactFormValues;
+  message?: string;
+};
+
 const INITIAL_VALUES:
   ContactFormValues = {
   name: "",
@@ -86,19 +99,6 @@ const MAX_MESSAGE_LENGTH =
 
 const EMAIL_PATTERN =
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function getReasonLabel(
-  reason: ContactReason,
-): string {
-  return (
-    REASON_OPTIONS.find(
-      (option) =>
-        option.value ===
-        reason,
-    )?.label ??
-    "General question"
-  );
-}
 
 function validateForm(
   values:
@@ -173,54 +173,6 @@ function validateForm(
   return errors;
 }
 
-function createMailtoUrl({
-  contactEmail,
-  values,
-}: {
-  contactEmail: string;
-
-  values:
-    ContactFormValues;
-}): string {
-  const reasonLabel =
-    getReasonLabel(
-      values.reason,
-    );
-
-  const emailSubject = [
-    "TimeInOne",
-    reasonLabel,
-    values.subject.trim(),
-  ].join(" — ");
-
-  const emailBody = [
-    "Hello TimeInOne,",
-    "",
-    values.message.trim(),
-    "",
-    "Contact details",
-    `Name: ${values.name.trim()}`,
-    `Email: ${values.email.trim()}`,
-    `Reason: ${reasonLabel}`,
-    "",
-    "Sent from the TimeInOne contact page.",
-  ].join("\n");
-
-  const parameters =
-    new URLSearchParams({
-      subject:
-        emailSubject,
-
-      body:
-        emailBody,
-    });
-
-  return (
-    `mailto:${contactEmail}?` +
-    parameters.toString()
-  );
-}
-
 function FieldError({
   message,
 }: {
@@ -263,11 +215,16 @@ export default function ContactForm({
     status,
     setStatus,
   ] = useState<
-    | "idle"
-    | "ready"
-    | "copied"
+    SubmitStatus
   >(
     "idle",
+  );
+
+  const [
+    submitMessage,
+    setSubmitMessage,
+  ] = useState(
+    "",
   );
 
   const remainingCharacters =
@@ -279,6 +236,10 @@ export default function ContactForm({
         values.message.length,
       ],
     );
+
+  const isSubmitting =
+    status ===
+    "sending";
 
   function updateField<
     Key extends keyof ContactFormValues,
@@ -309,9 +270,18 @@ export default function ContactForm({
       }),
     );
 
-    setStatus(
-      "idle",
-    );
+    if (
+      status !==
+      "sending"
+    ) {
+      setStatus(
+        "idle",
+      );
+
+      setSubmitMessage(
+        "",
+      );
+    }
   }
 
   function handleInputChange(
@@ -334,19 +304,13 @@ export default function ContactForm({
     );
   }
 
-  function handleSubmit(
+  async function handleSubmit(
     event:
       FormEvent<HTMLFormElement>,
-  ): void {
+  ): Promise<void> {
     event.preventDefault();
 
-    if (
-      values.website.trim()
-    ) {
-      setStatus(
-        "ready",
-      );
-
+    if (isSubmitting) {
       return;
     }
 
@@ -363,6 +327,14 @@ export default function ContactForm({
     ) {
       setErrors(
         validationErrors,
+      );
+
+      setStatus(
+        "idle",
+      );
+
+      setSubmitMessage(
+        "",
       );
 
       const firstInvalidField =
@@ -389,18 +361,127 @@ export default function ContactForm({
       {},
     );
 
-    const mailtoUrl =
-      createMailtoUrl({
-        contactEmail,
-        values,
-      });
-
     setStatus(
-      "ready",
+      "sending",
     );
 
-    window.location.href =
-      mailtoUrl;
+    setSubmitMessage(
+      "",
+    );
+
+    try {
+      const response =
+        await fetch(
+          "/api/contact",
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                name:
+                  values.name.trim(),
+
+                email:
+                  values.email.trim(),
+
+                reason:
+                  values.reason,
+
+                subject:
+                  values.subject.trim(),
+
+                message:
+                  values.message.trim(),
+
+                website:
+                  values.website.trim(),
+              }),
+          },
+        );
+
+      let payload:
+        ApiResponse = {};
+
+      try {
+        payload =
+          (await response.json()) as
+            ApiResponse;
+      } catch {
+        payload = {};
+      }
+
+      if (
+        !response.ok ||
+        payload.ok ===
+          false
+      ) {
+        if (
+          payload.field
+        ) {
+          setErrors({
+            [payload.field]:
+              payload.message ??
+              "Please check this field.",
+          });
+
+          document
+            .querySelector<
+              HTMLElement
+            >(
+              `[name="${payload.field}"]`,
+            )
+            ?.focus();
+        }
+
+        setStatus(
+          "error",
+        );
+
+        setSubmitMessage(
+          payload.message ??
+          "We couldn't send your message. Please try again.",
+        );
+
+        return;
+      }
+
+      setStatus(
+        "success",
+      );
+
+      setSubmitMessage(
+        "Your message has been sent successfully. Thank you for contacting TimeInOne.",
+      );
+
+      setValues(
+        INITIAL_VALUES,
+      );
+
+      setErrors(
+        {},
+      );
+    } catch (
+      error: unknown
+    ) {
+      console.error(
+        "Contact form submission failed:",
+        error,
+      );
+
+      setStatus(
+        "error",
+      );
+
+      setSubmitMessage(
+        "We couldn't send your message. Please check your connection and try again.",
+      );
+    }
   }
 
   async function copyEmail():
@@ -441,6 +522,10 @@ export default function ContactForm({
       "copied",
     );
 
+    setSubmitMessage(
+      "",
+    );
+
     window.setTimeout(
       () => {
         setStatus(
@@ -463,6 +548,10 @@ export default function ContactForm({
 
     setStatus(
       "idle",
+    );
+
+    setSubmitMessage(
+      "",
     );
   }
 
@@ -504,17 +593,18 @@ export default function ContactForm({
         </h2>
 
         <p className="mt-3 text-sm leading-7 text-text-secondary">
-          Complete the form and
-          TimeInOne will prepare a
-          message in your default email
-          application.
+          Complete the form below
+          and send your message
+          directly to TimeInOne.
         </p>
       </div>
 
       <form
-        onSubmit={
-          handleSubmit
-        }
+        onSubmit={(event) => {
+          void handleSubmit(
+            event,
+          );
+        }}
         noValidate
         className="bg-surface p-5 sm:p-6"
       >
@@ -560,6 +650,9 @@ export default function ContactForm({
               onChange={
                 handleInputChange
               }
+              disabled={
+                isSubmitting
+              }
               aria-invalid={
                 Boolean(
                   errors.name,
@@ -594,6 +687,9 @@ export default function ContactForm({
               onChange={
                 handleInputChange
               }
+              disabled={
+                isSubmitting
+              }
               aria-invalid={
                 Boolean(
                   errors.email,
@@ -626,6 +722,9 @@ export default function ContactForm({
               }
               onChange={
                 handleInputChange
+              }
+              disabled={
+                isSubmitting
               }
               className={
                 inputClasses
@@ -669,6 +768,9 @@ export default function ContactForm({
               onChange={
                 handleInputChange
               }
+              disabled={
+                isSubmitting
+              }
               aria-invalid={
                 Boolean(
                   errors.subject,
@@ -705,6 +807,9 @@ export default function ContactForm({
             onChange={
               handleInputChange
             }
+            disabled={
+              isSubmitting
+            }
             aria-invalid={
               Boolean(
                 errors.message,
@@ -738,20 +843,33 @@ export default function ContactForm({
         </label>
 
         {status ===
-          "ready" && (
+          "success" && (
           <div
             role="status"
             className="mt-5 rounded-2xl border border-success/20 bg-success-soft p-4"
           >
             <p className="font-semibold text-success">
-              Your email application
-              should now be open.
+              Message sent successfully.
             </p>
 
             <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Review the prepared message
-              and press Send from your
-              email application.
+              {submitMessage}
+            </p>
+          </div>
+        )}
+
+        {status ===
+          "error" && (
+          <div
+            role="alert"
+            className="mt-5 rounded-2xl border border-danger/20 bg-danger-soft p-4"
+          >
+            <p className="font-semibold text-danger">
+              Message not sent.
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              {submitMessage}
             </p>
           </div>
         )}
@@ -761,13 +879,20 @@ export default function ContactForm({
             type="submit"
             variant="primary"
             size="lg"
+            disabled={
+              isSubmitting
+            }
             className="gap-2"
           >
             <span aria-hidden="true">
-              →
+              {isSubmitting
+                ? "…"
+                : "→"}
             </span>
 
-            Prepare email
+            {isSubmitting
+              ? "Sending..."
+              : "Send message"}
           </Button>
 
           <Button
@@ -775,6 +900,9 @@ export default function ContactForm({
             onClick={() => {
               void copyEmail();
             }}
+            disabled={
+              isSubmitting
+            }
             variant={
               status ===
               "copied"
@@ -807,6 +935,9 @@ export default function ContactForm({
             onClick={
               resetForm
             }
+            disabled={
+              isSubmitting
+            }
             variant="ghost"
             size="lg"
             className="sm:ml-auto"
@@ -816,10 +947,11 @@ export default function ContactForm({
         </div>
 
         <p className="mt-5 text-xs leading-6 text-text-muted">
-          This form does not upload your
-          message to TimeInOne. It prepares
-          an email locally in your device’s
-          email application.
+          Your message is sent
+          securely to TimeInOne.
+          Your email address is used
+          only so we can reply to
+          your request.
         </p>
       </form>
     </Card>

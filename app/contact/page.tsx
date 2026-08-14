@@ -204,12 +204,13 @@ export default function ContactPage() {
         }}
       />
 
-      <InstitutionalPage
-        eyebrow="Contact"
-        title="Talk to TimeInOne"
-        description="Contact us about support, corrections, product ideas, privacy questions or professional opportunities."
-        badge="We value clear feedback"
-      >
+<InstitutionalPage
+  eyebrow="Contact"
+  title="Talk to TimeInOne"
+  description="Contact us about support, corrections, product ideas, privacy questions or professional opportunities."
+  badge="We value clear feedback"
+  compact
+>
         <div className="space-y-16">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
             <ContactForm
