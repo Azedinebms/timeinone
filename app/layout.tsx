@@ -3,6 +3,10 @@ import type {
   Viewport,
 } from "next";
 
+import {
+  GoogleAnalytics,
+} from "@next/third-parties/google";
+
 import "./globals.css";
 
 import Footer from "@/components/layout/Footer";
@@ -48,6 +52,10 @@ export default function RootLayout({
   const globalJsonLd =
     createGlobalJsonLd();
 
+  const googleAnalyticsId =
+    process.env
+      .NEXT_PUBLIC_GA_ID;
+
   return (
     <html
       lang="en"
@@ -73,6 +81,14 @@ export default function RootLayout({
             <Footer />
           </div>
         </ToastProvider>
+
+        {googleAnalyticsId && (
+          <GoogleAnalytics
+            gaId={
+              googleAnalyticsId
+            }
+          />
+        )}
       </body>
     </html>
   );
