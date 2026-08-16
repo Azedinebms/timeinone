@@ -45,6 +45,15 @@ const navigationItems:
       href:
         "/",
     },
+
+        {
+      label:
+        "Time Difference",
+
+      href:
+        "/time-difference",
+    },
+    
     {
       label:
         "Time Zones",

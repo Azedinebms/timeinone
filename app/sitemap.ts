@@ -104,6 +104,22 @@ function createStaticEntries(
     },
 
     {
+  url:
+    createUrl(
+      "/time-difference",
+    ),
+
+  lastModified:
+    now,
+
+  changeFrequency:
+    "weekly",
+
+  priority:
+    0.95,
+},
+
+    {
       url:
         createUrl(
           "/current-time",

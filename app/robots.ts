@@ -14,6 +14,14 @@ import {
   getCurrentTimeSitemapCount,
 } from "@/services/current-time-sitemap.service";
 
+import {
+  getConverterSitemapCount,
+} from "@/services/converter-sitemap.service";
+
+import {
+  getTimeDifferenceSitemapCount,
+} from "@/services/time-difference-sitemap.service";
+
 /* =========================================================
    HELPERS
 ========================================================= */
@@ -38,10 +46,17 @@ export default async function robots():
   const [
     worldClockSitemapCount,
     currentTimeSitemapCount,
+    converterSitemapCount,
+    timeDifferenceSitemapCount,
   ] =
     await Promise.all([
       getWorldClockSitemapCount(),
+
       getCurrentTimeSitemapCount(),
+
+      getConverterSitemapCount(),
+
+      getTimeDifferenceSitemapCount(),
     ]);
 
   const worldClockSitemaps =
@@ -70,6 +85,32 @@ export default async function robots():
         `${baseUrl}/current-time/sitemap/${id}.xml`,
     );
 
+  const converterSitemaps =
+    Array.from(
+      {
+        length:
+          converterSitemapCount,
+      },
+      (
+        _,
+        id,
+      ) =>
+        `${baseUrl}/converter/sitemap/${id}.xml`,
+    );
+
+  const timeDifferenceSitemaps =
+    Array.from(
+      {
+        length:
+          timeDifferenceSitemapCount,
+      },
+      (
+        _,
+        id,
+      ) =>
+        `${baseUrl}/time-difference/sitemap/${id}.xml`,
+    );
+
   return {
     rules: {
       userAgent:
@@ -85,6 +126,10 @@ export default async function robots():
       ...worldClockSitemaps,
 
       ...currentTimeSitemaps,
+
+      ...converterSitemaps,
+
+      ...timeDifferenceSitemaps,
     ],
 
     host:
