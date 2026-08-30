@@ -120,6 +120,11 @@ export async function getVisitorLocation():
         headersList,
       );
 
+      console.log(
+  "[TimeInOne Geo] IP detected:",
+  ip,
+);
+
     if (!ip) {
       return null;
     }
@@ -156,6 +161,11 @@ export async function getVisitorLocation():
 
       const data =
         (await response.json()) as IpWhoResponse;
+
+        console.log(
+  "[TimeInOne Geo] API response:",
+  data,
+);
 
       if (
         data.success !==

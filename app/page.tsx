@@ -167,7 +167,15 @@ export default async function HomePage({
           visitorLocation.countryCode,
         )
       : null;
+console.log(
+  "[TimeInOne Geo] Location:",
+  visitorLocation,
+);
 
+console.log(
+  "[TimeInOne Geo] Neon city:",
+  visitorCity,
+);
   const [
     fallbackFromCity,
     defaultToCity,
