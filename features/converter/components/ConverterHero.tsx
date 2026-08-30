@@ -49,11 +49,18 @@ type IpWhoResponse = {
   country_code?: string;
 };
 
-type VisitorCityApiResponse = {
+type VisitorCityResponse = {
   city:
     | CityOption
     | null;
 };
+
+/* =========================================================
+   CACHE
+========================================================= */
+
+const VISITOR_CITY_CACHE_KEY =
+  "timeinone:visitor-city";
 
 /* =========================================================
    COMPONENT
@@ -79,222 +86,235 @@ export default function ConverterHero({
     "Search cities and convert any date and time instantly.",
 }: ConverterHeroProps) {
   const [
-    detectedFromCity,
-    setDetectedFromCity,
+    resolvedFromCity,
+    setResolvedFromCity,
   ] =
     useState<CityOption>(
       initialFromCity,
     );
 
   /* =========================================================
-     VISITOR CITY DETECTION
+     VISITOR CITY
   ========================================================= */
 
   useEffect(() => {
     let cancelled =
       false;
 
-    async function detectVisitorCity() {
-      try {
-        /*
-         * IMPORTANT:
-         *
-         * If ?from= already exists,
-         * the explicit user-selected city
-         * must always win.
-         */
-        const searchParams =
-          new URLSearchParams(
-            window.location.search,
-          );
+    const detectVisitorCity =
+      async () => {
+        try {
+          /*
+           * IMPORTANT:
+           * Never replace a city explicitly
+           * supplied through ?from=
+           */
+          const urlParams =
+            new URLSearchParams(
+              window.location.search,
+            );
 
-        if (
-          searchParams.has(
-            "from",
-          )
-        ) {
-          return;
-        }
+          if (
+            urlParams.has(
+              "from",
+            )
+          ) {
+            return;
+          }
 
-        /*
-         * Optional session cache.
-         *
-         * Avoid repeating the IP lookup
-         * on every page refresh during
-         * the same browser session.
-         */
-        const cached =
-          sessionStorage.getItem(
-            "timeinoneVisitorCity",
-          );
+          /*
+           * Try session cache first.
+           */
+          const cachedValue =
+            window.sessionStorage.getItem(
+              VISITOR_CITY_CACHE_KEY,
+            );
 
-        if (cached) {
-          try {
-            const cachedCity =
-              JSON.parse(
-                cached,
-              ) as CityOption;
+          if (cachedValue) {
+            try {
+              const cachedCity =
+                JSON.parse(
+                  cachedValue,
+                ) as CityOption;
 
-            if (
-              cachedCity &&
-              cachedCity.id &&
-              cachedCity.city
-            ) {
               if (
-                !cancelled
+                cachedCity &&
+                typeof cachedCity.id ===
+                  "number" &&
+                cachedCity.id > 0 &&
+                typeof cachedCity.city ===
+                  "string" &&
+                typeof cachedCity.timezone ===
+                  "string"
               ) {
-                setDetectedFromCity(
-                  cachedCity,
-                );
-              }
+                if (!cancelled) {
+                  setResolvedFromCity(
+                    cachedCity,
+                  );
+                }
 
-              return;
+                return;
+              }
+            } catch {
+              window.sessionStorage.removeItem(
+                VISITOR_CITY_CACHE_KEY,
+              );
             }
-          } catch {
-            sessionStorage.removeItem(
-              "timeinoneVisitorCity",
+          }
+
+          /*
+           * Browser performs the request.
+           *
+           * ipwho.is therefore sees the
+           * VISITOR public IP, not Railway.
+           */
+          const controller =
+            new AbortController();
+
+          const timeoutId =
+            window.setTimeout(
+              () => {
+                controller.abort();
+              },
+              4000,
+            );
+
+          let geoResponse:
+            Response;
+
+          try {
+            geoResponse =
+              await fetch(
+                "https://ipwho.is/",
+                {
+                  method:
+                    "GET",
+
+                  signal:
+                    controller.signal,
+
+                  cache:
+                    "no-store",
+                },
+              );
+          } finally {
+            window.clearTimeout(
+              timeoutId,
             );
           }
-        }
 
-        /*
-         * Detect visitor public IP location.
-         *
-         * No browser geolocation permission
-         * popup is required.
-         */
-        const controller =
-          new AbortController();
+          if (
+            !geoResponse.ok
+          ) {
+            return;
+          }
 
-        const timeout =
-          window.setTimeout(
-            () => {
-              controller.abort();
-            },
-            2500,
+          const geo =
+            (await geoResponse.json()) as IpWhoResponse;
+
+          if (
+            geo.success !== true ||
+            typeof geo.city !==
+              "string" ||
+            typeof geo.country_code !==
+              "string"
+          ) {
+            return;
+          }
+
+          const detectedCity =
+            geo.city.trim();
+
+          const detectedCountryCode =
+            geo.country_code
+              .trim()
+              .toUpperCase();
+
+          if (
+            !detectedCity ||
+            detectedCountryCode.length !==
+              2
+          ) {
+            return;
+          }
+
+          /*
+           * Match the detected city against
+           * our own Neon database.
+           */
+          const matchUrl =
+            new URL(
+              "/api/visitor-city",
+              window.location.origin,
+            );
+
+          matchUrl.searchParams.set(
+            "city",
+            detectedCity,
           );
 
-        let geoResponse:
-          Response;
+          matchUrl.searchParams.set(
+            "countryCode",
+            detectedCountryCode,
+          );
 
-        try {
-          geoResponse =
+          const cityResponse =
             await fetch(
-              "https://ipwho.is/",
+              matchUrl.toString(),
               {
-                signal:
-                  controller.signal,
+                method:
+                  "GET",
 
                 cache:
                   "no-store",
               },
             );
-        } finally {
-          window.clearTimeout(
-            timeout,
-          );
-        }
 
-        if (
-          !geoResponse.ok
-        ) {
-          return;
-        }
+          if (
+            !cityResponse.ok
+          ) {
+            return;
+          }
 
-        const geoData =
-          (await geoResponse.json()) as IpWhoResponse;
+          const result =
+            (await cityResponse.json()) as VisitorCityResponse;
 
-        if (
-          geoData.success !==
-            true ||
-          typeof geoData.city !==
-            "string" ||
-          typeof geoData.country_code !==
-            "string"
-        ) {
-          return;
-        }
+          if (
+            !result.city
+          ) {
+            return;
+          }
 
-        const city =
-          geoData.city.trim();
+          if (
+            cancelled
+          ) {
+            return;
+          }
 
-        const countryCode =
-          geoData.country_code
-            .trim()
-            .toUpperCase();
-
-        if (
-          !city ||
-          countryCode.length !==
-            2
-        ) {
-          return;
-        }
-
-        /*
-         * Ask TimeInOne to match
-         * the detected city against Neon.
-         */
-        const cityResponse =
-          await fetch(
-            `/api/visitor-city?city=${encodeURIComponent(
-              city,
-            )}&countryCode=${encodeURIComponent(
-              countryCode,
-            )}`,
-            {
-              cache:
-                "no-store",
-            },
-          );
-
-        if (
-          !cityResponse.ok
-        ) {
-          return;
-        }
-
-        const result =
-          (await cityResponse.json()) as VisitorCityApiResponse;
-
-        if (
-          !result.city
-        ) {
-          return;
-        }
-
-        if (
-          cancelled
-        ) {
-          return;
-        }
-
-        /*
-         * Replace Casablanca
-         * with detected visitor city.
-         */
-        setDetectedFromCity(
-          result.city,
-        );
-
-        /*
-         * Cache only for current
-         * browser session.
-         */
-        sessionStorage.setItem(
-          "timeinoneVisitorCity",
-          JSON.stringify(
+          /*
+           * Replace Casablanca.
+           */
+          setResolvedFromCity(
             result.city,
-          ),
-        );
-      } catch {
-        /*
-         * Silent fallback.
-         *
-         * Casablanca remains selected.
-         */
-      }
-    }
+          );
+
+          /*
+           * Avoid repeating geolocation
+           * during this browser session.
+           */
+          window.sessionStorage.setItem(
+            VISITOR_CITY_CACHE_KEY,
+            JSON.stringify(
+              result.city,
+            ),
+          );
+        } catch {
+          /*
+           * Silent fallback:
+           * initialFromCity remains active.
+           */
+        }
+      };
 
     void detectVisitorCity();
 
@@ -351,23 +371,17 @@ export default function ConverterHero({
         )}
       >
         <ConverterTool
-          /*
-           * Key forces ConverterTool
-           * to reinitialize if visitor
-           * city changes after hydration.
-           */
-          key={
-            `${detectedFromCity.id}-${initialToCity.id}`
-          }
-
+          key={[
+            resolvedFromCity.id,
+            initialToCity.id,
+            initialDateTime,
+          ].join("-")}
           initialFromCity={
-            detectedFromCity
+            resolvedFromCity
           }
-
           initialToCity={
             initialToCity
           }
-
           initialDateTime={
             initialDateTime
           }

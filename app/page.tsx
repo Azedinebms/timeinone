@@ -169,15 +169,6 @@ export default async function HomePage({
           ),
     ]);
 
-  /*
-   * Explicit URL selection
-   * always has priority.
-   *
-   * Otherwise Casablanca is
-   * initially rendered and the
-   * browser may replace it with
-   * visitor city after hydration.
-   */
   const fromCity =
     requestedFromCity ??
     defaultFromCity;

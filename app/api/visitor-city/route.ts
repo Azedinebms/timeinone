@@ -8,7 +8,7 @@ import {
 } from "@/services/city.service";
 
 /* =========================================================
-   ROUTE
+   GET /api/visitor-city
 ========================================================= */
 
 export async function GET(
@@ -16,18 +16,20 @@ export async function GET(
 ) {
   try {
     const city =
-      request.nextUrl.searchParams.get(
-        "city",
-      );
+      request.nextUrl.searchParams
+        .get("city")
+        ?.trim();
 
     const countryCode =
-      request.nextUrl.searchParams.get(
-        "countryCode",
-      );
+      request.nextUrl.searchParams
+        .get("countryCode")
+        ?.trim()
+        .toUpperCase();
 
     if (
       !city ||
-      !countryCode
+      !countryCode ||
+      countryCode.length !== 2
     ) {
       return NextResponse.json(
         {
@@ -45,19 +47,13 @@ export async function GET(
         countryCode,
       );
 
-    if (!matchedCity) {
-      return NextResponse.json({
-        city: null,
-      });
-    }
-
     return NextResponse.json({
       city:
-        matchedCity,
+        matchedCity ?? null,
     });
   } catch (error) {
     console.error(
-      "[Visitor City API]",
+      "[VisitorCity API]",
       error,
     );
 
