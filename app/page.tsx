@@ -11,8 +11,13 @@ import {
 } from "@/lib/seo";
 
 import {
+  getVisitorLocation,
+} from "@/lib/visitor-location";
+
+import {
   findCityByGeonameId,
   findCityById,
+  findCityByNameAndCountry,
 } from "@/services/city.service";
 
 /* =========================================================
@@ -85,6 +90,9 @@ type HomePageProps = {
    DEFAULT CITIES
 ========================================================= */
 
+/*
+ * Casablanca remains our safe fallback.
+ */
 const CASABLANCA_GEONAME_ID =
   2553604;
 
@@ -111,8 +119,7 @@ function parseCityId(
     Number.isInteger(
       id,
     ) &&
-    id >
-      0
+    id > 0
       ? id
       : null
   );
@@ -138,8 +145,31 @@ export default async function HomePage({
       params.to,
     );
 
+  /*
+   * Only detect visitor location when
+   * there is no explicit ?from= city.
+   *
+   * The user's explicit selection always wins.
+   */
+  const visitorLocation =
+    !fromId
+      ? await getVisitorLocation()
+      : null;
+
+  /*
+   * Try to resolve the detected city
+   * against our own Neon database.
+   */
+  const visitorCity =
+    visitorLocation
+      ? await findCityByNameAndCountry(
+          visitorLocation.city,
+          visitorLocation.countryCode,
+        )
+      : null;
+
   const [
-    defaultFromCity,
+    fallbackFromCity,
     defaultToCity,
     requestedFromCity,
     requestedToCity,
@@ -170,10 +200,24 @@ export default async function HomePage({
           ),
     ]);
 
+  /*
+   * FROM priority:
+   *
+   * 1. Explicit ?from=
+   * 2. Visitor IP location
+   * 3. Casablanca fallback
+   */
   const fromCity =
     requestedFromCity ??
-    defaultFromCity;
+    visitorCity ??
+    fallbackFromCity;
 
+  /*
+   * TO priority:
+   *
+   * 1. Explicit ?to=
+   * 2. New York
+   */
   const toCity =
     requestedToCity ??
     defaultToCity;

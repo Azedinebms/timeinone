@@ -1,4 +1,6 @@
-import type { CityOption } from "@/types/city";
+import type {
+  CityOption,
+} from "@/types/city";
 
 import {
   getCityByGeonameId,
@@ -16,42 +18,58 @@ function mapCityToOption(
   return {
     id: city.id,
     city: city.name,
-    country: city.country.name,
-    countryCode: city.country.iso2,
+    country:
+      city.country.name,
+    countryCode:
+      city.country.iso2,
     slug: city.slug,
-    timezone: city.timezone.name,
+    timezone:
+      city.timezone.name,
 
     latitude:
       city.latitude === null
         ? null
-        : Number(city.latitude),
+        : Number(
+            city.latitude,
+          ),
 
     longitude:
       city.longitude === null
         ? null
-        : Number(city.longitude),
+        : Number(
+            city.longitude,
+          ),
 
-    population: city.population,
+    population:
+      city.population,
   };
 }
 
 export async function fetchPopularCities(
   limit = 20,
 ) {
-  const cities = await getPopularCities(
-    limit,
-  );
+  const cities =
+    await getPopularCities(
+      limit,
+    );
 
-  return cities.map(mapCityToOption);
+  return cities.map(
+    mapCityToOption,
+  );
 }
 
 export async function findCityById(
   id: number,
 ) {
-  const city = await getCityById(id);
+  const city =
+    await getCityById(
+      id,
+    );
 
   return city
-    ? mapCityToOption(city)
+    ? mapCityToOption(
+        city,
+      )
     : null;
 }
 
@@ -64,7 +82,9 @@ export async function findCityByGeonameId(
     );
 
   return city
-    ? mapCityToOption(city)
+    ? mapCityToOption(
+        city,
+      )
     : null;
 }
 
@@ -72,13 +92,16 @@ export async function findCityBySlug(
   slug: string,
   countryIso2?: string,
 ) {
-  const city = await getCityBySlug(
-    slug,
-    countryIso2,
-  );
+  const city =
+    await getCityBySlug(
+      slug,
+      countryIso2,
+    );
 
   return city
-    ? mapCityToOption(city)
+    ? mapCityToOption(
+        city,
+      )
     : null;
 }
 
@@ -93,7 +116,82 @@ export async function findCityBySlugAndCountry(
     );
 
   return city
-    ? mapCityToOption(city)
+    ? mapCityToOption(
+        city,
+      )
+    : null;
+}
+
+/* =========================================================
+   FIND CITY BY NAME + COUNTRY
+========================================================= */
+
+export async function findCityByNameAndCountry(
+  cityName: string,
+  countryCode: string,
+) {
+  const cleanCityName =
+    cityName.trim();
+
+  const cleanCountryCode =
+    countryCode
+      .trim()
+      .toUpperCase();
+
+  if (
+    !cleanCityName ||
+    !cleanCountryCode
+  ) {
+    return null;
+  }
+
+  const cities =
+    await searchCities(
+      cleanCityName,
+      20,
+    );
+
+  const normalizedName =
+    cleanCityName.toLocaleLowerCase(
+      "en-US",
+    );
+
+  /*
+   * Priority 1:
+   * exact city name + exact country
+   */
+  const exactMatch =
+    cities.find(
+      (city) =>
+        city.country.iso2.toUpperCase() ===
+          cleanCountryCode &&
+        city.name.toLocaleLowerCase(
+          "en-US",
+        ) ===
+          normalizedName,
+    );
+
+  if (exactMatch) {
+    return mapCityToOption(
+      exactMatch,
+    );
+  }
+
+  /*
+   * Priority 2:
+   * same country, closest search result
+   */
+  const countryMatch =
+    cities.find(
+      (city) =>
+        city.country.iso2.toUpperCase() ===
+        cleanCountryCode,
+    );
+
+  return countryMatch
+    ? mapCityToOption(
+        countryMatch,
+      )
     : null;
 }
 
@@ -101,10 +199,13 @@ export async function findCities(
   query: string,
   limit = 20,
 ) {
-  const cities = await searchCities(
-    query,
-    limit,
-  );
+  const cities =
+    await searchCities(
+      query,
+      limit,
+    );
 
-  return cities.map(mapCityToOption);
+  return cities.map(
+    mapCityToOption,
+  );
 }
