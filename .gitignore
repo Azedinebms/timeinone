@@ -61,3 +61,11 @@ out/
 .env
 .env.*
 !.env.example
+
+# Local database verification files
+/cities-check.sql
+/countries-check.sql
+/timezones-check.sql
+
+# Local npm security audit
+/audit-production.json

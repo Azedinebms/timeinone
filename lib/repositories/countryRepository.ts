@@ -1,7 +1,7 @@
 
 import "server-only";
 
-import { getNeon } from "@/lib/db/neon";
+import { getPostgres } from "@/lib/db/postgres";
 
 const DEFAULT_COUNTRY_LIMIT = 250;
 const DEFAULT_CITY_LIMIT = 100;
@@ -57,14 +57,16 @@ function normalizeLimit(
 export async function getAllCountriesWithCityCounts(
   limit = DEFAULT_COUNTRY_LIMIT
 ): Promise<CountryRepositoryRecord[]> {
-  const sql = await getNeon();
+  const pool = getPostgres();
+
   const normalizedLimit = normalizeLimit(
     limit,
     DEFAULT_COUNTRY_LIMIT,
     DEFAULT_COUNTRY_LIMIT
   );
 
-  const rows = await sql`
+  const result = await pool.query(
+    `
     SELECT
       co.id,
       co.name,
@@ -75,10 +77,12 @@ export async function getAllCountriesWithCityCounts(
     INNER JOIN cities ci ON ci."countryId" = co.id
     GROUP BY co.id, co.name, co.iso2, co.iso3
     ORDER BY co.name ASC
-    LIMIT ${normalizedLimit}
-  `;
+    LIMIT $1
+    `,
+    [normalizedLimit]
+  );
 
-  return rows.map((row) => ({
+  return result.rows.map((row) => ({
     id: Number(row.id),
     name: String(row.name),
     iso2: String(row.iso2),
@@ -98,9 +102,10 @@ export async function getCountryByCode(
     return null;
   }
 
-  const sql = await getNeon();
+  const pool = getPostgres();
 
-  const rows = await sql`
+  const result = await pool.query(
+    `
     SELECT
       co.id,
       co.name,
@@ -112,13 +117,15 @@ export async function getCountryByCode(
         WHERE ci."countryId" = co.id
       ) AS city_count
     FROM countries co
-    WHERE co.iso2 = ${normalizedCode}
+    WHERE co.iso2 = $1
     LIMIT 1
-  `;
+    `,
+    [normalizedCode]
+  );
 
-  if (rows.length === 0) return null;
+  if (result.rows.length === 0) return null;
 
-  const row = rows[0];
+  const row = result.rows[0];
 
   return {
     id: Number(row.id),
@@ -147,9 +154,10 @@ export async function getPopularCitiesByCountryCode(
     MAX_CITY_LIMIT
   );
 
-  const sql = await getNeon();
+  const pool = getPostgres();
 
-  const rows = await sql`
+  const result = await pool.query(
+    `
     SELECT
       ci.id,
       ci."geonameId",
@@ -168,12 +176,14 @@ export async function getPopularCitiesByCountryCode(
     FROM cities ci
     INNER JOIN countries co ON co.id = ci."countryId"
     INNER JOIN timezones tz ON tz.id = ci."timezoneId"
-    WHERE co.iso2 = ${normalizedCode}
+    WHERE co.iso2 = $1
     ORDER BY ci.population DESC NULLS LAST, ci.name ASC
-    LIMIT ${normalizedLimit}
-  `;
+    LIMIT $2
+    `,
+    [normalizedCode, normalizedLimit]
+  );
 
-  return rows.map((row) => ({
+  return result.rows.map((row) => ({
     id: Number(row.id),
     geonameId: Number(row.geonameId),
     name: String(row.name),

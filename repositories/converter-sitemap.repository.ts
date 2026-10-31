@@ -1,13 +1,20 @@
 
 import "server-only";
 
-import { getNeon } from "@/lib/db/neon";
+import { getPostgres } from "@/lib/db/postgres";
 
 export type ConverterSitemapCityRecord = {
   id: number;
   slug: string;
   population: number | null;
   updatedAt: Date;
+};
+
+type ConverterSitemapCityRow = {
+  id: number;
+  slug: string;
+  population: number | null;
+  updatedAt: Date | string;
 };
 
 /* =========================================================
@@ -17,8 +24,6 @@ export type ConverterSitemapCityRecord = {
 export async function getConverterSitemapCandidates(
   limit = 1_000,
 ): Promise<ConverterSitemapCityRecord[]> {
-  const sql = await getNeon();
-
   // Limite sécurisée pour éviter les requêtes excessives.
   const safeLimit = Number.isFinite(limit)
     ? Math.max(0, Math.floor(limit))
@@ -28,26 +33,24 @@ export async function getConverterSitemapCandidates(
     return [];
   }
 
-  const rows = await sql`
-    SELECT
-      city.id,
-      city.slug,
-      city.population,
-      city."updatedAt"
+  const pool = getPostgres();
 
-    FROM cities AS city
+  const result = await pool.query<ConverterSitemapCityRow>(
+    `SELECT
+       city.id,
+       city.slug,
+       city.population,
+       city."updatedAt"
+     FROM cities AS city
+     WHERE city.population > 0
+     ORDER BY
+       city.population DESC,
+       city.id ASC
+     LIMIT $1`,
+    [safeLimit],
+  );
 
-    WHERE
-      city.population > 0
-
-    ORDER BY
-      city.population DESC,
-      city.id ASC
-
-    LIMIT ${safeLimit}
-  `;
-
-  return rows.map((row) => ({
+  return result.rows.map((row) => ({
     id: Number(row.id),
     slug: String(row.slug),
     population:

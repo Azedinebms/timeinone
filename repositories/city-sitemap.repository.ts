@@ -1,7 +1,7 @@
 
 import "server-only";
 
-import { getNeon } from "@/lib/db/neon";
+import { getPostgres } from "@/lib/db/postgres";
 
 export type CitySitemapRecord = {
   slug: string;
@@ -12,19 +12,25 @@ export type CitySitemapRecord = {
   };
 };
 
+type CitySitemapRow = {
+  slug: string;
+  updatedAt: Date | string;
+  countryIso2: string;
+};
+
 /* =========================================================
    COUNT CITIES FOR SITEMAP
 ========================================================= */
 
 export async function countCitiesForSitemap(): Promise<number> {
-  const sql = await getNeon();
+  const pool = getPostgres();
 
-  const rows = await sql`
-    SELECT COUNT(*)::int AS total
-    FROM cities
-  `;
+  const result = await pool.query<{ total: number }>(
+    `SELECT COUNT(*)::int AS total
+     FROM cities`,
+  );
 
-  return Number(rows[0]?.total ?? 0);
+  return Number(result.rows[0]?.total ?? 0);
 }
 
 /* =========================================================
@@ -35,8 +41,6 @@ export async function getCitiesForSitemap(
   offset: number,
   limit: number,
 ): Promise<CitySitemapRecord[]> {
-  const sql = await getNeon();
-
   const safeOffset = Math.max(
     0,
     Math.floor(Number.isFinite(offset) ? offset : 0),
@@ -51,24 +55,23 @@ export async function getCitiesForSitemap(
     return [];
   }
 
-  const rows = await sql`
-    SELECT
-      city.slug,
-      city."updatedAt",
-      country.iso2 AS "countryIso2"
+  const pool = getPostgres();
 
-    FROM cities AS city
+  const result = await pool.query<CitySitemapRow>(
+    `SELECT
+       city.slug,
+       city."updatedAt",
+       country.iso2 AS "countryIso2"
+     FROM cities AS city
+     INNER JOIN countries AS country
+       ON country.id = city."countryId"
+     ORDER BY city.id ASC
+     LIMIT $1
+     OFFSET $2`,
+    [safeLimit, safeOffset],
+  );
 
-    INNER JOIN countries AS country
-      ON country.id = city."countryId"
-
-    ORDER BY city.id ASC
-
-    LIMIT ${safeLimit}
-    OFFSET ${safeOffset}
-  `;
-
-  return rows.map((row) => ({
+  return result.rows.map((row) => ({
     slug: String(row.slug),
     updatedAt:
       row.updatedAt instanceof Date

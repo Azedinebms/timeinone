@@ -1,6 +1,7 @@
+
 import "server-only";
 
-import { getNeon } from "@/lib/db/neon";
+import { getPostgres } from "@/lib/db/postgres";
 
 export type CityWithRelations = {
   id: number;
@@ -49,78 +50,87 @@ function normalizeLimit(limit: number, maximum: number): number {
   return Math.min(Math.max(Math.floor(limit), 0), maximum);
 }
 
-export async function getPopularCities(limit = 20): Promise<CityWithRelations[]> {
-  const sql = await getNeon();
+const citySelect = `
+  SELECT city.id, city."geonameId", city.name, city."asciiName", city.slug,
+    city.latitude::text AS latitude,
+    city.longitude::text AS longitude,
+    city.population,
+    country.name AS "countryName",
+    country.iso2 AS "countryIso2",
+    timezone.name AS "timezoneName"
+  FROM cities AS city
+  JOIN countries AS country ON country.id = city."countryId"
+  JOIN timezones AS timezone ON timezone.id = city."timezoneId"
+`;
+
+export async function getPopularCities(
+  limit = 20,
+): Promise<CityWithRelations[]> {
+  const pool = getPostgres();
   const safeLimit = normalizeLimit(limit, 500);
-  const rows = await sql`
-    SELECT city.id, city."geonameId", city.name, city."asciiName", city.slug,
-      city.latitude::text AS latitude, city.longitude::text AS longitude, city.population,
-      country.name AS "countryName", country.iso2 AS "countryIso2",
-      timezone.name AS "timezoneName"
-    FROM cities AS city
-    JOIN countries AS country ON country.id = city."countryId"
-    JOIN timezones AS timezone ON timezone.id = city."timezoneId"
-    ORDER BY city.population DESC NULLS LAST, city.name ASC
-    LIMIT ${safeLimit}
-  `;
-  return rows.map((row) => mapCity(row as CityRow));
+
+  const result = await pool.query<CityRow>(
+    `${citySelect}
+     ORDER BY city.population DESC NULLS LAST, city.name ASC
+     LIMIT $1`,
+    [safeLimit],
+  );
+
+  return result.rows.map(mapCity);
 }
 
-export async function getCityById(id: number): Promise<CityWithRelations | null> {
+export async function getCityById(
+  id: number,
+): Promise<CityWithRelations | null> {
   if (!Number.isInteger(id)) return null;
-  const sql = await getNeon();
-  const rows = await sql`
-    SELECT city.id, city."geonameId", city.name, city."asciiName", city.slug,
-      city.latitude::text AS latitude, city.longitude::text AS longitude, city.population,
-      country.name AS "countryName", country.iso2 AS "countryIso2",
-      timezone.name AS "timezoneName"
-    FROM cities AS city
-    JOIN countries AS country ON country.id = city."countryId"
-    JOIN timezones AS timezone ON timezone.id = city."timezoneId"
-    WHERE city.id = ${id}
-    LIMIT 1
-  `;
-  return rows.length ? mapCity(rows[0] as CityRow) : null;
+
+  const pool = getPostgres();
+
+  const result = await pool.query<CityRow>(
+    `${citySelect}
+     WHERE city.id = $1
+     LIMIT 1`,
+    [id],
+  );
+
+  return result.rows.length ? mapCity(result.rows[0]) : null;
 }
 
-export async function getCityByGeonameId(geonameId: number): Promise<CityWithRelations | null> {
+export async function getCityByGeonameId(
+  geonameId: number,
+): Promise<CityWithRelations | null> {
   if (!Number.isInteger(geonameId)) return null;
-  const sql = await getNeon();
-  const rows = await sql`
-    SELECT city.id, city."geonameId", city.name, city."asciiName", city.slug,
-      city.latitude::text AS latitude, city.longitude::text AS longitude, city.population,
-      country.name AS "countryName", country.iso2 AS "countryIso2",
-      timezone.name AS "timezoneName"
-    FROM cities AS city
-    JOIN countries AS country ON country.id = city."countryId"
-    JOIN timezones AS timezone ON timezone.id = city."timezoneId"
-    WHERE city."geonameId" = ${geonameId}
-    LIMIT 1
-  `;
-  return rows.length ? mapCity(rows[0] as CityRow) : null;
+
+  const pool = getPostgres();
+
+  const result = await pool.query<CityRow>(
+    `${citySelect}
+     WHERE city."geonameId" = $1
+     LIMIT 1`,
+    [geonameId],
+  );
+
+  return result.rows.length ? mapCity(result.rows[0]) : null;
 }
 
 export async function getCityBySlug(
   slug: string,
   countryIso2?: string,
 ): Promise<CityWithRelations | null> {
-  const sql = await getNeon();
+  const pool = getPostgres();
   const normalizedSlug = slug.toLowerCase();
   const normalizedCountry = countryIso2?.toUpperCase() ?? null;
-  const rows = await sql`
-    SELECT city.id, city."geonameId", city.name, city."asciiName", city.slug,
-      city.latitude::text AS latitude, city.longitude::text AS longitude, city.population,
-      country.name AS "countryName", country.iso2 AS "countryIso2",
-      timezone.name AS "timezoneName"
-    FROM cities AS city
-    JOIN countries AS country ON country.id = city."countryId"
-    JOIN timezones AS timezone ON timezone.id = city."timezoneId"
-    WHERE city.slug = ${normalizedSlug}
-      AND (${normalizedCountry}::text IS NULL OR country.iso2 = ${normalizedCountry})
-    ORDER BY city.population DESC NULLS LAST
-    LIMIT 1
-  `;
-  return rows.length ? mapCity(rows[0] as CityRow) : null;
+
+  const result = await pool.query<CityRow>(
+    `${citySelect}
+     WHERE city.slug = $1
+       AND ($2::text IS NULL OR country.iso2 = $2)
+     ORDER BY city.population DESC NULLS LAST
+     LIMIT 1`,
+    [normalizedSlug, normalizedCountry],
+  );
+
+  return result.rows.length ? mapCity(result.rows[0]) : null;
 }
 
 export async function getCityBySlugAndCountry(
@@ -130,42 +140,47 @@ export async function getCityBySlugAndCountry(
   return getCityBySlug(slug, countryIso2);
 }
 
-export async function searchCities(query: string, limit = 20): Promise<CityWithRelations[]> {
+export async function searchCities(
+  query: string,
+  limit = 20,
+): Promise<CityWithRelations[]> {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length < 2) return [];
-  const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? Math.floor(limit) : 20, 1), 50);
-  const sql = await getNeon();
-  // PostgreSQL pg_trgm extension is required, as in the original Prisma SQL.
-  const rows = await sql`
-    SELECT city.id, city."geonameId", city.name, city."asciiName", city.slug,
-      city.latitude::text AS latitude, city.longitude::text AS longitude, city.population,
-      country.name AS "countryName", country.iso2 AS "countryIso2",
-      timezone.name AS "timezoneName",
+
+  const safeLimit = Math.min(
+    Math.max(Number.isFinite(limit) ? Math.floor(limit) : 20, 1),
+    50,
+  );
+
+  const pool = getPostgres();
+
+  // Requires the PostgreSQL pg_trgm extension.
+  const result = await pool.query<CityRow>(
+    `${citySelect},
       GREATEST(
-        similarity(LOWER(city.name), ${normalizedQuery}),
-        similarity(LOWER(COALESCE(city."asciiName", '')), ${normalizedQuery}),
-        similarity(LOWER(city.slug), ${normalizedQuery})
+        similarity(LOWER(city.name), $1),
+        similarity(LOWER(COALESCE(city."asciiName", '')), $1),
+        similarity(LOWER(city.slug), $1)
       ) AS "similarityScore"
-    FROM cities AS city
-    JOIN countries AS country ON country.id = city."countryId"
-    JOIN timezones AS timezone ON timezone.id = city."timezoneId"
-    WHERE LOWER(city.name) LIKE '%' || ${normalizedQuery} || '%'
-      OR LOWER(COALESCE(city."asciiName", '')) LIKE '%' || ${normalizedQuery} || '%'
-      OR LOWER(city.slug) LIKE '%' || ${normalizedQuery} || '%'
-      OR similarity(LOWER(city.name), ${normalizedQuery}) >= 0.2
-      OR similarity(LOWER(COALESCE(city."asciiName", '')), ${normalizedQuery}) >= 0.2
-    ORDER BY
-      CASE
-        WHEN LOWER(city.name) = ${normalizedQuery} THEN 0
-        WHEN LOWER(city."asciiName") = ${normalizedQuery} THEN 1
-        WHEN LOWER(city.name) LIKE ${normalizedQuery} || '%' THEN 2
-        WHEN LOWER(city."asciiName") LIKE ${normalizedQuery} || '%' THEN 3
-        ELSE 4
-      END,
-      "similarityScore" DESC,
-      city.population DESC NULLS LAST,
-      city.name ASC
-    LIMIT ${safeLimit}
-  `;
-  return rows.map((row) => mapCity(row as CityRow));
+     WHERE LOWER(city.name) LIKE '%' || $1 || '%'
+       OR LOWER(COALESCE(city."asciiName", '')) LIKE '%' || $1 || '%'
+       OR LOWER(city.slug) LIKE '%' || $1 || '%'
+       OR similarity(LOWER(city.name), $1) >= 0.2
+       OR similarity(LOWER(COALESCE(city."asciiName", '')), $1) >= 0.2
+     ORDER BY
+       CASE
+         WHEN LOWER(city.name) = $1 THEN 0
+         WHEN LOWER(city."asciiName") = $1 THEN 1
+         WHEN LOWER(city.name) LIKE $1 || '%' THEN 2
+         WHEN LOWER(city."asciiName") LIKE $1 || '%' THEN 3
+         ELSE 4
+       END,
+       "similarityScore" DESC,
+       city.population DESC NULLS LAST,
+       city.name ASC
+     LIMIT $2`,
+    [normalizedQuery, safeLimit],
+  );
+
+  return result.rows.map(mapCity);
 }

@@ -1,6 +1,7 @@
+
 import "server-only";
 
-import { getNeon } from "@/lib/db/neon";
+import { getPostgres } from "@/lib/db/postgres";
 
 const MAX_PAGE_SIZE = 50_000;
 
@@ -29,8 +30,9 @@ function normalizePageSize(pageSize: number): number {
 }
 
 export async function countWorldClockSitemapCities(): Promise<number> {
-  const sql = await getNeon();
-  const rows = await sql`
+  const pool = getPostgres();
+
+  const result = await pool.query(`
     SELECT COUNT(DISTINCT (city."slug", city."countryId"))::int AS "total"
     FROM "cities" AS city
     INNER JOIN "countries" AS country ON country."id" = city."countryId"
@@ -38,23 +40,29 @@ export async function countWorldClockSitemapCities(): Promise<number> {
     WHERE city."slug" IS NOT NULL AND BTRIM(city."slug") <> ''
       AND country."iso2" IS NOT NULL AND BTRIM(country."iso2") <> ''
       AND timezone."name" IS NOT NULL AND BTRIM(timezone."name") <> ''
-  `;
-  return Number(rows[0]?.total ?? 0);
+  `);
+
+  return Number(result.rows[0]?.total ?? 0);
 }
 
 export async function getWorldClockSitemapCities(
   page: number,
   pageSize = MAX_PAGE_SIZE,
 ): Promise<WorldClockSitemapCityRecord[]> {
-  const sql = await getNeon();
+  const pool = getPostgres();
+
   const normalizedPage = normalizePage(page);
   const normalizedPageSize = normalizePageSize(pageSize);
   const offset = normalizedPage * normalizedPageSize;
+
   if (!Number.isSafeInteger(offset)) {
-    throw new RangeError("World clock sitemap page offset exceeds safe integer range");
+    throw new RangeError(
+      "World clock sitemap page offset exceeds safe integer range"
+    );
   }
 
-  const rows = await sql`
+  const result = await pool.query(
+    `
     WITH "canonical_cities" AS (
       SELECT DISTINCT ON (city."slug", city."countryId")
         city."id", city."slug", city."updatedAt",
@@ -72,13 +80,18 @@ export async function getWorldClockSitemapCities(
     SELECT "id", "slug", "updatedAt", "countryIso2"
     FROM "canonical_cities"
     ORDER BY "id" ASC
-    LIMIT ${normalizedPageSize} OFFSET ${offset}
-  `;
+    LIMIT $1 OFFSET $2
+    `,
+    [normalizedPageSize, offset]
+  );
 
-  return (rows as unknown as SitemapCityRow[]).map((row) => ({
+  return (result.rows as SitemapCityRow[]).map((row) => ({
     id: Number(row.id),
     slug: row.slug,
-    updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt),
+    updatedAt:
+      row.updatedAt instanceof Date
+        ? row.updatedAt
+        : new Date(row.updatedAt),
     country: { iso2: row.countryIso2 },
   }));
 }

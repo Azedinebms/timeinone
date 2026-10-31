@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getNeon } from "@/lib/db/neon";
+import { getPostgres } from "@/lib/db/postgres";
 
 const DEFAULT_POPULAR_LIMIT = 24;
 const MAX_LIST_LIMIT = 100;
@@ -103,10 +103,13 @@ function deduplicateCitiesById(groups: CityRepositoryRecord[][], limit: number):
 
 // Parameterized SQL with Neon query() prevents injection, including in LIKE filters.
 async function queryCities(where: string, params: unknown[], limit: number, order = ORDER_POPULAR): Promise<CityRepositoryRecord[]> {
-  const sql = await getNeon();
-  const text = `${SELECT_CITY} WHERE ${where} ${order} LIMIT $${params.length + 1}`;
-  const rows = await sql.query(text, [...params, limit]);
-  return rows.map((row) => mapCity(row as DbRow));
+  const pool = getPostgres();
+
+const text = `${SELECT_CITY} WHERE ${where} ${order} LIMIT $${params.length + 1}`;
+
+const result = await pool.query(text, [...params, limit]);
+
+return result.rows.map((row) => mapCity(row as DbRow));
 }
 
 export async function getCityById(cityId: number): Promise<CityRepositoryRecord | null> {
