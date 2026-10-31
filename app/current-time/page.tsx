@@ -24,6 +24,8 @@ import {
   type JsonLdObject,
 } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 /* =========================================================
    CONFIG
 ========================================================= */

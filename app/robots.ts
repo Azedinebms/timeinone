@@ -22,6 +22,8 @@ import {
   getTimeDifferenceSitemapCount,
 } from "@/services/time-difference-sitemap.service";
 
+export const dynamic = "force-dynamic";
+
 /* =========================================================
    HELPERS
 ========================================================= */

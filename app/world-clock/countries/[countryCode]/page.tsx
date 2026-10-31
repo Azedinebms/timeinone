@@ -20,7 +20,6 @@ import CountryWorldClockHero from "@/features/world-clock/components/CountryWorl
 import WorldClockGrid from "@/features/world-clock/components/WorldClockGrid";
 
 import {
-  getWorldClockCountries,
   getWorldClockCountryByCode,
 } from "@/features/world-clock";
 
@@ -31,6 +30,8 @@ import {
   type JsonLdObject,
 } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 type CountryPageProps = {
   params: Promise<{
     countryCode: string;
@@ -40,19 +41,6 @@ type CountryPageProps = {
 export const dynamicParams =
   true;
 
-export async function generateStaticParams() {
-  const countries =
-    await getWorldClockCountries();
-
-  return countries.map(
-    (
-      country,
-    ) => ({
-      countryCode:
-        country.countryCode.toLowerCase(),
-    }),
-  );
-}
 
 export async function generateMetadata({
   params,

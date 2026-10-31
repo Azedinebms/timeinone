@@ -11,25 +11,29 @@ import {
   getTimeDifferenceSitemapCount,
 } from "@/services/time-difference-sitemap.service";
 
+import {
+  CONVERTER_SITEMAP_CITY_LIMIT,
+  CONVERTER_SITEMAP_PAGE_SIZE,
+} from "@/services/converter-sitemap.service";
+
+export const dynamic = "force-dynamic";
+
 /* =========================================================
    GENERATE TIME DIFFERENCE SITEMAP SHARDS
 ========================================================= */
 
-export async function generateSitemaps() {
-  const sitemapCount =
-    await getTimeDifferenceSitemapCount();
+export function generateSitemaps() {
+  const cityCount = CONVERTER_SITEMAP_CITY_LIMIT;
+
+  const pairCount = cityCount * (cityCount - 1);
+
+  const sitemapCount = Math.ceil(
+    pairCount / CONVERTER_SITEMAP_PAGE_SIZE,
+  );
 
   return Array.from(
-    {
-      length:
-        sitemapCount,
-    },
-    (
-      _,
-      id,
-    ) => ({
-      id,
-    }),
+    { length: sitemapCount },
+    (_, id) => ({ id }),
   );
 }
 

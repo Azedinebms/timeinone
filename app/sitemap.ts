@@ -16,6 +16,8 @@ import {
   fetchPopularCities,
 } from "@/services/city.service";
 
+export const dynamic = "force-dynamic";
+
 /* =========================================================
    CONFIG
 ========================================================= */

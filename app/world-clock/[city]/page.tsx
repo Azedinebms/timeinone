@@ -21,13 +21,13 @@ import CityTimeComparison from "@/features/world-clock/components/CityTimeCompar
 import CityWorldClockHero from "@/features/world-clock/components/CityWorldClockHero";
 import RelatedWorldClocks from "@/features/world-clock/components/RelatedWorldClocks";
 
+
 import {
   createWorldClockCityPath,
   createWorldClockCityRouteSlug,
   getRelatedWorldClockCitiesForCity,
   getWorldClockCityBySlug,
   getWorldClockCityBySlugAndCountry,
-  getWorldClockIndexCities,
   parseWorldClockCityRouteSlug,
   type WorldClockCity,
 } from "@/features/world-clock";
@@ -48,6 +48,7 @@ type WorldClockCityPageProps = {
 
 export const dynamicParams =
   true;
+export const dynamic = "force-dynamic";
 
 async function resolveWorldClockCity(
   routeSlug: string,
@@ -87,21 +88,6 @@ async function resolveWorldClockCity(
   );
 }
 
-export async function generateStaticParams() {
-  const cities =
-    await getWorldClockIndexCities(
-      24,
-    );
-
-  return cities.map(
-    (city) => ({
-      city:
-        createWorldClockCityRouteSlug(
-          city,
-        ),
-    }),
-  );
-}
 
 export async function generateMetadata({
   params,

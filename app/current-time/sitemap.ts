@@ -7,26 +7,14 @@ import {
   getCurrentTimeSitemapEntries,
 } from "@/services/current-time-sitemap.service";
 
+export const dynamic = "force-dynamic";
+
 /* =========================================================
    GENERATE SHARDS
 ========================================================= */
 
-export async function generateSitemaps() {
-  const sitemapCount =
-    await getCurrentTimeSitemapCount();
-
-  return Array.from(
-    {
-      length:
-        sitemapCount,
-    },
-    (
-      _,
-      id,
-    ) => ({
-      id,
-    }),
-  );
+export function generateSitemaps() {
+  return [{ id: 0 }];
 }
 
 /* =========================================================

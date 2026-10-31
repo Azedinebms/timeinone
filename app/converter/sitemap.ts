@@ -7,21 +7,25 @@ import {
 } from "@/lib/seo";
 
 import {
+  CONVERTER_SITEMAP_CITY_LIMIT,
+  CONVERTER_SITEMAP_PAGE_SIZE,
   fetchConverterSitemapPage,
-  getConverterSitemapCount,
 } from "@/services/converter-sitemap.service";
 
-export async function generateSitemaps() {
-  const sitemapCount =
-    await getConverterSitemapCount();
+export const dynamic = "force-dynamic";
+
+export function generateSitemaps() {
+  const cityCount = CONVERTER_SITEMAP_CITY_LIMIT;
+
+  const pairCount = cityCount * (cityCount - 1);
+
+  const sitemapCount = Math.ceil(
+    pairCount / CONVERTER_SITEMAP_PAGE_SIZE,
+  );
 
   return Array.from(
-    {
-      length: sitemapCount,
-    },
-    (_, id) => ({
-      id,
-    }),
+    { length: sitemapCount },
+    (_, id) => ({ id }),
   );
 }
 

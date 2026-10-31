@@ -7,26 +7,14 @@ import {
   getWorldClockSitemapEntries,
 } from "@/features/world-clock";
 
+export const dynamic = "force-dynamic";
+
 /* =========================================================
    GENERATE WORLD CLOCK SITEMAP SHARDS
 ========================================================= */
 
-export async function generateSitemaps() {
-  const sitemapCount =
-    await getWorldClockSitemapCount();
-
-  return Array.from(
-    {
-      length:
-        sitemapCount,
-    },
-    (
-      _,
-      id,
-    ) => ({
-      id,
-    }),
-  );
+export function generateSitemaps() {
+  return [{ id: 0 }];
 }
 
 /* =========================================================
