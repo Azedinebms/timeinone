@@ -20,7 +20,21 @@ const CITY_FILE_PATH = resolve(
   "data/geonames/cities15000.txt",
 );
 
+/*
+ * Number of cities processed before displaying progress.
+ *
+ * This is NOT a Prisma transaction anymore.
+ * Neon performs much better here without keeping hundreds
+ * of remote queries inside a single transaction.
+ */
 const CITY_BATCH_SIZE = 250;
+
+/*
+ * Limit simultaneous database requests.
+ *
+ * We deliberately keep this conservative for Neon.
+ */
+const CITY_CONCURRENCY = 10;
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -82,7 +96,10 @@ function parsePositiveInteger(
 
   const parsedValue = Number.parseInt(value, 10);
 
-  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+  if (
+    !Number.isFinite(parsedValue) ||
+    parsedValue < 0
+  ) {
     return null;
   }
 
@@ -103,7 +120,9 @@ function parseCoordinate(
     : null;
 }
 
-async function readCountries(): Promise<ParsedCountry[]> {
+async function readCountries(): Promise<
+  ParsedCountry[]
+> {
   const countries: ParsedCountry[] = [];
 
   const fileStream = createReadStream(
@@ -121,17 +140,29 @@ async function readCountries(): Promise<ParsedCountry[]> {
   for await (const rawLine of lines) {
     const line = rawLine.trim();
 
-    if (!line || line.startsWith("#")) {
+    if (
+      !line ||
+      line.startsWith("#")
+    ) {
       continue;
     }
 
     const columns = line.split("\t");
 
-    const iso2 = columns[0]?.trim().toUpperCase();
-    const iso3 = columns[1]?.trim().toUpperCase();
+    const iso2 = columns[0]
+      ?.trim()
+      .toUpperCase();
+
+    const iso3 = columns[1]
+      ?.trim()
+      .toUpperCase();
+
     const name = columns[4]?.trim();
 
-    if (!iso2 || !name) {
+    if (
+      !iso2 ||
+      !name
+    ) {
       continue;
     }
 
@@ -145,7 +176,9 @@ async function readCountries(): Promise<ParsedCountry[]> {
   return countries;
 }
 
-async function readCities(): Promise<ParsedCity[]> {
+async function readCities(): Promise<
+  ParsedCity[]
+> {
   const cities: ParsedCity[] = [];
 
   const fileStream = createReadStream(
@@ -199,16 +232,27 @@ async function readCities(): Promise<ParsedCity[]> {
     );
 
     const name = columns[1]?.trim();
-    const asciiName = columns[2]?.trim();
-    const latitude = parseCoordinate(columns[4]);
-    const longitude = parseCoordinate(columns[5]);
+
+    const asciiName =
+      columns[2]?.trim();
+
+    const latitude =
+      parseCoordinate(columns[4]);
+
+    const longitude =
+      parseCoordinate(columns[5]);
+
     const countryIso2 = columns[8]
       ?.trim()
       .toUpperCase();
-    const population = parsePositiveInteger(
-      columns[14],
-    );
-    const timezoneName = columns[17]?.trim();
+
+    const population =
+      parsePositiveInteger(
+        columns[14],
+      );
+
+    const timezoneName =
+      columns[17]?.trim();
 
     if (
       !Number.isInteger(geonameId) ||
@@ -225,7 +269,8 @@ async function readCities(): Promise<ParsedCity[]> {
     cities.push({
       geonameId,
       name,
-      asciiName: asciiName || null,
+      asciiName:
+        asciiName || null,
       latitude,
       longitude,
       population,
@@ -249,10 +294,12 @@ async function importCountries(
       where: {
         iso2: country.iso2,
       },
+
       update: {
         name: country.name,
         iso3: country.iso3,
       },
+
       create: {
         name: country.name,
         iso2: country.iso2,
@@ -269,7 +316,10 @@ async function importTimezones(
 ) {
   const timezoneNames = Array.from(
     new Set(
-      cities.map((city) => city.timezoneName),
+      cities.map(
+        (city) =>
+          city.timezoneName,
+      ),
     ),
   );
 
@@ -278,9 +328,12 @@ async function importTimezones(
   );
 
   await prisma.timezone.createMany({
-    data: timezoneNames.map((name) => ({
-      name,
-    })),
+    data: timezoneNames.map(
+      (name) => ({
+        name,
+      }),
+    ),
+
     skipDuplicates: true,
   });
 
@@ -297,10 +350,12 @@ async function getCountryMap() {
     })) as CountryRecord[];
 
   return new Map(
-    countries.map((country) => [
-      country.iso2,
-      country.id,
-    ]),
+    countries.map(
+      (country) => [
+        country.iso2,
+        country.id,
+      ],
+    ),
   );
 }
 
@@ -314,11 +369,105 @@ async function getTimezoneMap() {
     })) as TimezoneRecord[];
 
   return new Map(
-    timezones.map((timezone) => [
-      timezone.name,
-      timezone.id,
-    ]),
+    timezones.map(
+      (timezone) => [
+        timezone.name,
+        timezone.id,
+      ],
+    ),
   );
+}
+
+async function upsertCity(
+  city: ParsedCity,
+  countryMap: Map<string, number>,
+  timezoneMap: Map<string, number>,
+) {
+  const countryId =
+    countryMap.get(
+      city.countryIso2,
+    );
+
+  const timezoneId =
+    timezoneMap.get(
+      city.timezoneName,
+    );
+
+  if (
+    !countryId ||
+    !timezoneId
+  ) {
+    console.warn(
+      `Skipped ${city.name}: missing country or timezone relation.`,
+    );
+
+    return false;
+  }
+
+  const slug =
+    createSlug(
+      city.asciiName ||
+        city.name,
+    ) ||
+    `city-${city.geonameId}`;
+
+  await prisma.city.upsert({
+    where: {
+      geonameId:
+        city.geonameId,
+    },
+
+    update: {
+      name:
+        city.name,
+
+      asciiName:
+        city.asciiName,
+
+      slug,
+
+      latitude:
+        city.latitude,
+
+      longitude:
+        city.longitude,
+
+      population:
+        city.population,
+
+      countryId,
+
+      timezoneId,
+    },
+
+    create: {
+      geonameId:
+        city.geonameId,
+
+      name:
+        city.name,
+
+      asciiName:
+        city.asciiName,
+
+      slug,
+
+      latitude:
+        city.latitude,
+
+      longitude:
+        city.longitude,
+
+      population:
+        city.population,
+
+      countryId,
+
+      timezoneId,
+    },
+  });
+
+  return true;
 }
 
 async function importCityBatch(
@@ -326,74 +475,60 @@ async function importCityBatch(
   countryMap: Map<string, number>,
   timezoneMap: Map<string, number>,
 ) {
-  const operations = cities.flatMap((city) => {
-    const countryId = countryMap.get(
-      city.countryIso2,
+  let importedCount = 0;
+
+  /*
+   * Process only a small number of queries
+   * simultaneously.
+   *
+   * No long Prisma transaction is kept open,
+   * which avoids P2028 on remote databases.
+   */
+  for (
+    let index = 0;
+    index < cities.length;
+    index += CITY_CONCURRENCY
+  ) {
+    const chunk = cities.slice(
+      index,
+      index + CITY_CONCURRENCY,
     );
 
-    const timezoneId = timezoneMap.get(
-      city.timezoneName,
-    );
-
-    if (!countryId || !timezoneId) {
-      console.warn(
-        `Skipped ${city.name}: missing country or timezone relation.`,
+    const results =
+      await Promise.all(
+        chunk.map(
+          (city) =>
+            upsertCity(
+              city,
+              countryMap,
+              timezoneMap,
+            ),
+        ),
       );
 
-      return [];
-    }
-
-    const slug =
-      createSlug(city.asciiName || city.name) ||
-      `city-${city.geonameId}`;
-
-    return [
-      prisma.city.upsert({
-        where: {
-          geonameId: city.geonameId,
-        },
-        update: {
-          name: city.name,
-          asciiName: city.asciiName,
-          slug,
-          latitude: city.latitude,
-          longitude: city.longitude,
-          population: city.population,
-          countryId,
-          timezoneId,
-        },
-        create: {
-          geonameId: city.geonameId,
-          name: city.name,
-          asciiName: city.asciiName,
-          slug,
-          latitude: city.latitude,
-          longitude: city.longitude,
-          population: city.population,
-          countryId,
-          timezoneId,
-        },
-      }),
-    ];
-  });
-
-  if (operations.length === 0) {
-    return 0;
+    importedCount +=
+      results.filter(Boolean)
+        .length;
   }
 
-  await prisma.$transaction(operations);
-
-  return operations.length;
+  return importedCount;
 }
 
 async function importCities(
   cities: ParsedCity[],
 ) {
-  const countryMap = await getCountryMap();
-  const timezoneMap = await getTimezoneMap();
+  const countryMap =
+    await getCountryMap();
+
+  const timezoneMap =
+    await getTimezoneMap();
 
   console.log(
     `Importing ${cities.length} cities...`,
+  );
+
+  console.log(
+    `Concurrency: ${CITY_CONCURRENCY}`,
   );
 
   let importedCount = 0;
@@ -408,19 +543,25 @@ async function importCities(
       index + CITY_BATCH_SIZE,
     );
 
-    importedCount += await importCityBatch(
-      batch,
-      countryMap,
-      timezoneMap,
-    );
+    importedCount +=
+      await importCityBatch(
+        batch,
+        countryMap,
+        timezoneMap,
+      );
 
-    const progress = Math.min(
-      index + batch.length,
-      cities.length,
-    );
+    const progress =
+      Math.min(
+        index +
+          batch.length,
+        cities.length,
+      );
 
     const percentage = (
-      (progress / cities.length) *
+      (
+        progress /
+        cities.length
+      ) *
       100
     ).toFixed(1);
 
@@ -438,53 +579,97 @@ async function main() {
   const startedAt = Date.now();
 
   console.log("");
-  console.log("TimeInOne GeoNames import started.");
-  console.log("--------------------------------");
+  console.log(
+    "TimeInOne GeoNames import started.",
+  );
 
-  const countries = await readCountries();
+  console.log(
+    "--------------------------------",
+  );
+
+  const countries =
+    await readCountries();
 
   console.log(
     `${countries.length} countries parsed.`,
   );
 
-  const cities = await readCities();
+  const cities =
+    await readCities();
 
-  console.log(`${cities.length} cities parsed.`);
+  console.log(
+    `${cities.length} cities parsed.`,
+  );
 
-  await importCountries(countries);
-  await importTimezones(cities);
-  await importCities(cities);
+  await importCountries(
+    countries,
+  );
 
-  const totalCities = await prisma.city.count();
+  await importTimezones(
+    cities,
+  );
+
+  await importCities(
+    cities,
+  );
+
+  const totalCities =
+    await prisma.city.count();
+
   const totalCountries =
     await prisma.country.count();
+
   const totalTimezones =
     await prisma.timezone.count();
 
   const durationSeconds = (
-    (Date.now() - startedAt) /
+    (Date.now() -
+      startedAt) /
     1000
   ).toFixed(1);
 
-  console.log("--------------------------------");
-  console.log("TimeInOne GeoNames import completed.");
-  console.log(`Countries: ${totalCountries}`);
-  console.log(`Timezones: ${totalTimezones}`);
-  console.log(`Cities: ${totalCities}`);
-  console.log(`Duration: ${durationSeconds}s`);
+  console.log(
+    "--------------------------------",
+  );
+
+  console.log(
+    "TimeInOne GeoNames import completed.",
+  );
+
+  console.log(
+    `Countries: ${totalCountries}`,
+  );
+
+  console.log(
+    `Timezones: ${totalTimezones}`,
+  );
+
+  console.log(
+    `Cities: ${totalCities}`,
+  );
+
+  console.log(
+    `Duration: ${durationSeconds}s`,
+  );
+
   console.log("");
 }
 
 main()
-  .catch((error: unknown) => {
-    console.error("");
-    console.error(
-      "TimeInOne GeoNames import failed:",
-      error,
-    );
+  .catch(
+    (error: unknown) => {
+      console.error("");
 
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+      console.error(
+        "TimeInOne GeoNames import failed:",
+        error,
+      );
+
+      process.exitCode = 1;
+    },
+  )
+  .finally(
+    async () => {
+      await prisma.$disconnect();
+    },
+  );

@@ -14,9 +14,9 @@ model Country {
   name      String
   iso2      String   @unique @db.VarChar(2)
   iso3      String?  @unique @db.VarChar(3)
-  cities    City[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  cities    City[]
 
   @@index([name])
   @@map("countries")
@@ -25,9 +25,9 @@ model Country {
 model Timezone {
   id        Int      @id @default(autoincrement())
   name      String   @unique
-  cities    City[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  cities    City[]
 
   @@index([name])
   @@map("timezones")
@@ -35,7 +35,6 @@ model Timezone {
 
 model City {
   id         Int      @id @default(autoincrement())
-  geonameId  Int      @unique
   name       String
   asciiName  String?
   slug       String
@@ -44,12 +43,11 @@ model City {
   population Int?
   countryId  Int
   timezoneId Int
-
-  country  Country  @relation(fields: [countryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  timezone Timezone @relation(fields: [timezoneId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  geonameId  Int      @unique
+  country    Country  @relation(fields: [countryId], references: [id])
+  timezone   Timezone @relation(fields: [timezoneId], references: [id])
 
   @@index([name])
   @@index([asciiName])
@@ -58,6 +56,5 @@ model City {
   @@index([population])
   @@index([countryId])
   @@index([timezoneId])
-
   @@map("cities")
 }

@@ -97,30 +97,27 @@ export default function ConverterHero({
      VISITOR CITY
   ========================================================= */
 
-  useEffect(() => {
-    let cancelled =
-      false;
+ useEffect(() => {
+  let cancelled = false;
 
-    const detectVisitorCity =
-      async () => {
-        try {
-          /*
-           * IMPORTANT:
-           * Never replace a city explicitly
-           * supplied through ?from=
-           */
-          const urlParams =
-            new URLSearchParams(
-              window.location.search,
-            );
+  const detectVisitorCity = async () => {
+    try {
+      // Ne jamais modifier les villes
+      // des pages de conversion SEO.
+      const pathname = window.location.pathname;
 
-          if (
-            urlParams.has(
-              "from",
-            )
-          ) {
-            return;
-          }
+      if (pathname.startsWith("/converter/")) {
+        return;
+      }
+
+      // Respecter les paramètres explicites.
+      const urlParams = new URLSearchParams(
+        window.location.search,
+      );
+
+      if (urlParams.has("from")) {
+        return;
+      }
 
           /*
            * Try session cache first.

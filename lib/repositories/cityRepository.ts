@@ -1,1204 +1,213 @@
 import "server-only";
 
-import {
-  getPrismaAsync,
-} from "@/lib/db/prisma";
+import { getNeon } from "@/lib/db/neon";
 
-const DEFAULT_POPULAR_LIMIT =
-  24;
-
-const MAX_LIST_LIMIT =
-  100;
-
-const DEFAULT_SEARCH_LIMIT =
-  20;
-
-const SEARCH_EXPANSION_FACTOR =
-  3;
+const DEFAULT_POPULAR_LIMIT = 24;
+const MAX_LIST_LIMIT = 100;
+const DEFAULT_SEARCH_LIMIT = 20;
+const SEARCH_EXPANSION_FACTOR = 3;
 
 export type CityRepositoryRecord = {
   id: number;
   geonameId: number;
-
   name: string;
   asciiName: string | null;
   slug: string;
-
   latitude: unknown;
   longitude: unknown;
-
   population: number | null;
-
-  country: {
-    id: number;
-    name: string;
-    iso2: string;
-    iso3: string | null;
-  };
-
-  timezone: {
-    id: number;
-    name: string;
-  };
+  country: { id: number; name: string; iso2: string; iso3: string | null };
+  timezone: { id: number; name: string };
 };
 
-const citySelect = {
-  id: true,
-  geonameId: true,
+type DbRow = Record<string, unknown>;
 
-  name: true,
-  asciiName: true,
-  slug: true,
-
-  latitude: true,
-  longitude: true,
-
-  population: true,
-
-  country: {
-    select: {
-      id: true,
-      name: true,
-      iso2: true,
-      iso3: true,
+// Preserve the original repository's nested country/timezone response shape.
+function mapCity(row: DbRow): CityRepositoryRecord {
+  return {
+    id: Number(row.id),
+    geonameId: Number(row.geonameId),
+    name: String(row.name),
+    asciiName: row.asciiName == null ? null : String(row.asciiName),
+    slug: String(row.slug),
+    // Neon returns PostgreSQL DECIMAL as a string, preserving precision.
+    latitude: row.latitude,
+    longitude: row.longitude,
+    population: row.population == null ? null : Number(row.population),
+    country: {
+      id: Number(row.country_id),
+      name: String(row.country_name),
+      iso2: String(row.country_iso2),
+      iso3: row.country_iso3 == null ? null : String(row.country_iso3),
     },
-  },
-
-  timezone: {
-    select: {
-      id: true,
-      name: true,
+    timezone: {
+      id: Number(row.timezone_id),
+      name: String(row.timezone_name),
     },
-  },
-} as const;
-
-function normalizeSlug(
-  slug: string,
-): string {
-  try {
-    return decodeURIComponent(
-      slug,
-    )
-      .trim()
-      .toLowerCase()
-      .replace(/_/g, "-")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-  } catch {
-    return slug
-      .trim()
-      .toLowerCase()
-      .replace(/_/g, "-")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-  }
+  };
 }
 
-function normalizeCountryCode(
-  countryCode: string,
-): string {
-  return countryCode
-    .trim()
-    .toUpperCase();
+const SELECT_CITY = `
+  SELECT c.id, c."geonameId", c.name, c."asciiName", c.slug,
+         c.latitude::text AS latitude, c.longitude::text AS longitude,
+         c.population,
+         co.id AS country_id, co.name AS country_name,
+         co.iso2 AS country_iso2, co.iso3 AS country_iso3,
+         tz.id AS timezone_id, tz.name AS timezone_name
+  FROM cities c
+  JOIN countries co ON co.id = c."countryId"
+  JOIN timezones tz ON tz.id = c."timezoneId"
+`;
+
+const ORDER_POPULAR = `ORDER BY c.population DESC NULLS LAST, c.name ASC, c."geonameId" ASC`;
+
+function normalizeSlug(slug: string): string {
+  let decoded = slug;
+  try { decoded = decodeURIComponent(slug); } catch { /* malformed encoding */ }
+  return decoded.trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-")
+    .replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
-function normalizeSearchQuery(
-  query: string,
-): string {
-  try {
-    return decodeURIComponent(
-      query,
-    )
-      .trim()
-      .replace(/\s+/g, " ");
-  } catch {
-    return query
-      .trim()
-      .replace(/\s+/g, " ");
-  }
+function normalizeCountryCode(code: string): string {
+  return code.trim().toUpperCase();
 }
 
-/**
- * Produit une version sans accents pour comparer
- * plus facilement les requêtes avec asciiName.
- *
- * Exemple :
- * São Paulo → Sao Paulo
- * München   → Munchen
- */
-function removeDiacritics(
-  value: string,
-): string {
-  return value
-    .normalize("NFD")
-    .replace(
-      /[\u0300-\u036f]/g,
-      "",
-    );
+function normalizeSearchQuery(query: string): string {
+  let decoded = query;
+  try { decoded = decodeURIComponent(query); } catch { /* malformed encoding */ }
+  return decoded.trim().replace(/\s+/g, " ");
 }
 
-function normalizeLimit(
-  limit: number | undefined,
-  fallback: number,
-): number {
-  if (
-    typeof limit !== "number" ||
-    !Number.isFinite(limit)
-  ) {
-    return fallback;
-  }
-
-  return Math.min(
-    MAX_LIST_LIMIT,
-    Math.max(
-      1,
-      Math.floor(limit),
-    ),
-  );
+function removeDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function deduplicateCitiesById(
-  cityGroups:
-    CityRepositoryRecord[][],
-  limit: number,
-): CityRepositoryRecord[] {
-  const seenIds =
-    new Set<number>();
+function normalizeLimit(limit: number | undefined, fallback: number): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) return fallback;
+  return Math.min(MAX_LIST_LIMIT, Math.max(1, Math.floor(limit)));
+}
 
-  const results:
-    CityRepositoryRecord[] = [];
-
-  for (
-    const cityGroup
-    of cityGroups
-  ) {
-    for (
-      const city
-      of cityGroup
-    ) {
-      if (
-        seenIds.has(
-          city.id,
-        )
-      ) {
-        continue;
-      }
-
-      seenIds.add(
-        city.id,
-      );
-
-      results.push(
-        city,
-      );
-
-      if (
-        results.length >=
-        limit
-      ) {
-        return results;
-      }
+function deduplicateCitiesById(groups: CityRepositoryRecord[][], limit: number): CityRepositoryRecord[] {
+  const seen = new Set<number>();
+  const results: CityRepositoryRecord[] = [];
+  for (const group of groups) {
+    for (const city of group) {
+      if (seen.has(city.id)) continue;
+      seen.add(city.id);
+      results.push(city);
+      if (results.length >= limit) return results;
     }
   }
-
   return results;
 }
 
-export async function getCityById(
-  cityId: number,
-): Promise<
-  CityRepositoryRecord | null
-> {
-  console.log(
-    `[TimeInOne][DB] getCityById START cityId=${cityId}`,
-  );
-
-  try {
-    const prisma =
-      await getPrismaAsync();
-
-    console.log(
-      `[TimeInOne][DB] getCityById PRISMA_READY cityId=${cityId}`,
-    );
-
-    if (
-      !Number.isInteger(cityId) ||
-      cityId <= 0
-    ) {
-      console.log(
-        `[TimeInOne][DB] getCityById INVALID cityId=${cityId}`,
-      );
-
-      return null;
-    }
-
-    const city =
-      await prisma.city.findUnique({
-        where: {
-          id: cityId,
-        },
-
-        select:
-          citySelect,
-      });
-
-    console.log(
-      `[TimeInOne][DB] getCityById SUCCESS cityId=${cityId} found=${Boolean(
-        city,
-      )}`,
-    );
-
-    return city;
-  } catch (error) {
-    const err =
-      error instanceof Error
-        ? error
-        : new Error(
-            String(error),
-          );
-
-    const extra =
-      error as {
-        code?: unknown;
-        clientVersion?: unknown;
-        cause?: unknown;
-      };
-
-    console.error(
-      `[TimeInOne][DB] getCityById ERROR cityId=${cityId}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_NAME=${err.name}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_MESSAGE=${err.message}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_CODE=${String(
-        extra?.code ?? "",
-      )}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_CLIENT_VERSION=${String(
-        extra?.clientVersion ?? "",
-      )}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_CAUSE=${String(
-        extra?.cause ?? "",
-      )}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_STACK=${err.stack ?? ""}`,
-    );
-
-    throw error;
-  }
+// Parameterized SQL with Neon query() prevents injection, including in LIKE filters.
+async function queryCities(where: string, params: unknown[], limit: number, order = ORDER_POPULAR): Promise<CityRepositoryRecord[]> {
+  const sql = await getNeon();
+  const text = `${SELECT_CITY} WHERE ${where} ${order} LIMIT $${params.length + 1}`;
+  const rows = await sql.query(text, [...params, limit]);
+  return rows.map((row) => mapCity(row as DbRow));
 }
 
-export async function getCityByGeonameId(
-  geonameId: number,
-): Promise<
-  CityRepositoryRecord | null
-> {
-  console.log(
-    `[TimeInOne][DB] getCityByGeonameId START geonameId=${geonameId}`,
-  );
-
-  try {
-    const prisma =
-      await getPrismaAsync();
-
-    console.log(
-      `[TimeInOne][DB] getCityByGeonameId PRISMA_READY geonameId=${geonameId}`,
-    );
-
-    if (
-      !Number.isInteger(
-        geonameId,
-      ) ||
-      geonameId <= 0
-    ) {
-      console.log(
-        `[TimeInOne][DB] getCityByGeonameId INVALID geonameId=${geonameId}`,
-      );
-
-      return null;
-    }
-
-    const city =
-      await prisma.city.findUnique({
-        where: {
-          geonameId,
-        },
-
-        select:
-          citySelect,
-      });
-
-    console.log(
-      `[TimeInOne][DB] getCityByGeonameId SUCCESS geonameId=${geonameId} found=${Boolean(
-        city,
-      )}`,
-    );
-
-    return city;
-  } catch (error) {
-    const err =
-      error instanceof Error
-        ? error
-        : new Error(
-            String(error),
-          );
-
-    const extra =
-      error as {
-        code?: unknown;
-        clientVersion?: unknown;
-        cause?: unknown;
-      };
-
-    console.error(
-      `[TimeInOne][DB] getCityByGeonameId ERROR geonameId=${geonameId}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_NAME=${err.name}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_MESSAGE=${err.message}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_CODE=${String(
-        extra?.code ?? "",
-      )}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_CLIENT_VERSION=${String(
-        extra?.clientVersion ?? "",
-      )}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_CAUSE=${String(
-        extra?.cause ?? "",
-      )}`,
-    );
-
-    console.error(
-      `[TimeInOne][DB] ERROR_STACK=${err.stack ?? ""}`,
-    );
-
-    throw error;
-  }
+export async function getCityById(cityId: number): Promise<CityRepositoryRecord | null> {
+  if (!Number.isInteger(cityId) || cityId <= 0) return null;
+  return (await queryCities('c.id = $1', [cityId], 1, ''))[0] ?? null;
 }
 
-/**
- * Retourne la ville la plus pertinente
- * lorsqu'un même slug existe plusieurs fois.
- *
- * La population est utilisée comme premier
- * critère de sélection.
- */
-export async function getCityBySlug(
-  slug: string,
-): Promise<
-  CityRepositoryRecord | null
-> {
-  const prisma =
-  await getPrismaAsync();
-  const normalizedSlug =
-    normalizeSlug(
-      slug,
-    );
-
-  if (!normalizedSlug) {
-    return null;
-  }
-
-  return prisma.city.findFirst({
-    where: {
-      slug:
-        normalizedSlug,
-    },
-
-    orderBy: [
-      {
-        population:
-          "desc",
-      },
-      {
-        geonameId:
-          "asc",
-      },
-      {
-        id:
-          "asc",
-      },
-    ],
-
-    select:
-      citySelect,
-  });
+export async function getCityByGeonameId(geonameId: number): Promise<CityRepositoryRecord | null> {
+  if (!Number.isInteger(geonameId) || geonameId <= 0) return null;
+  return (await queryCities('c."geonameId" = $1', [geonameId], 1, ''))[0] ?? null;
 }
 
-/**
- * Retourne la ville canonique correspondant
- * à un slug et à un pays.
- *
- * En cas de doublon dans le même pays,
- * la ville la plus peuplée est sélectionnée.
- */
-export async function getCityBySlugAndCountryCode(
-  slug: string,
-  countryCode: string,
-): Promise<
-  CityRepositoryRecord | null
-> {
-  const prisma =
-  await getPrismaAsync();
-  const normalizedSlug =
-    normalizeSlug(
-      slug,
-    );
-
-  const normalizedCountryCode =
-    normalizeCountryCode(
-      countryCode,
-    );
-
-  if (
-    !normalizedSlug ||
-    normalizedCountryCode.length !==
-      2
-  ) {
-    return null;
-  }
-
-  return prisma.city.findFirst({
-    where: {
-      slug:
-        normalizedSlug,
-
-      country: {
-        is: {
-          iso2:
-            normalizedCountryCode,
-        },
-      },
-    },
-
-    orderBy: [
-      {
-        population:
-          "desc",
-      },
-      {
-        geonameId:
-          "asc",
-      },
-      {
-        id:
-          "asc",
-      },
-    ],
-
-    select:
-      citySelect,
-  });
+export async function getCityBySlug(slug: string): Promise<CityRepositoryRecord | null> {
+  const normalized = normalizeSlug(slug);
+  if (!normalized) return null;
+  return (await queryCities('c.slug = $1', [normalized], 1,
+    'ORDER BY c.population DESC NULLS LAST, c."geonameId" ASC, c.id ASC'))[0] ?? null;
 }
 
-export async function getPopularCities(
-  limit =
-    DEFAULT_POPULAR_LIMIT,
-): Promise<
-  CityRepositoryRecord[]
-> {
-  const prisma =
-  await getPrismaAsync();
-  const normalizedLimit =
-    normalizeLimit(
-      limit,
-      DEFAULT_POPULAR_LIMIT,
-    );
-
-  return prisma.city.findMany({
-    where: {
-      population: {
-        gt: 0,
-      },
-    },
-
-    orderBy: [
-      {
-        population:
-          "desc",
-      },
-      {
-        name:
-          "asc",
-      },
-      {
-        geonameId:
-          "asc",
-      },
-    ],
-
-    take:
-      normalizedLimit,
-
-    select:
-      citySelect,
-  });
+export async function getCityBySlugAndCountryCode(slug: string, countryCode: string): Promise<CityRepositoryRecord | null> {
+  const normalized = normalizeSlug(slug);
+  const code = normalizeCountryCode(countryCode);
+  if (!normalized || code.length !== 2) return null;
+  return (await queryCities('c.slug = $1 AND co.iso2 = $2', [normalized, code], 1,
+    'ORDER BY c.population DESC NULLS LAST, c."geonameId" ASC, c.id ASC'))[0] ?? null;
 }
 
-export async function getCitiesByCountry(
-  countryCode: string,
-  limit =
-    DEFAULT_POPULAR_LIMIT,
-): Promise<
-  CityRepositoryRecord[]
-> {
-  const prisma =
-  await getPrismaAsync();
-  const normalizedCountryCode =
-    normalizeCountryCode(
-      countryCode,
-    );
-
-  if (
-    normalizedCountryCode.length !==
-      2
-  ) {
-    return [];
-  }
-
-  const normalizedLimit =
-    normalizeLimit(
-      limit,
-      DEFAULT_POPULAR_LIMIT,
-    );
-
-  return prisma.city.findMany({
-    where: {
-      country: {
-        is: {
-          iso2:
-            normalizedCountryCode,
-        },
-      },
-    },
-
-    orderBy: [
-      {
-        population:
-          "desc",
-      },
-      {
-        name:
-          "asc",
-      },
-      {
-        geonameId:
-          "asc",
-      },
-    ],
-
-    take:
-      normalizedLimit,
-
-    select:
-      citySelect,
-  });
+export async function getPopularCities(limit = DEFAULT_POPULAR_LIMIT): Promise<CityRepositoryRecord[]> {
+  return queryCities('c.population > 0', [], normalizeLimit(limit, DEFAULT_POPULAR_LIMIT));
 }
 
-export async function getCitiesByTimezone(
-  timezoneName: string,
-  limit =
-    DEFAULT_POPULAR_LIMIT,
-): Promise<
-  CityRepositoryRecord[]
-> {
-  const prisma =
-  await getPrismaAsync();
-  const normalizedTimezoneName =
-    normalizeSearchQuery(
-      timezoneName,
-    );
-
-  if (
-    !normalizedTimezoneName
-  ) {
-    return [];
-  }
-
-  const normalizedLimit =
-    normalizeLimit(
-      limit,
-      DEFAULT_POPULAR_LIMIT,
-    );
-
-  return prisma.city.findMany({
-    where: {
-      timezone: {
-        is: {
-          name: {
-            equals:
-              normalizedTimezoneName,
-
-            mode:
-              "insensitive",
-          },
-        },
-      },
-    },
-
-    orderBy: [
-      {
-        population:
-          "desc",
-      },
-      {
-        name:
-          "asc",
-      },
-      {
-        geonameId:
-          "asc",
-      },
-    ],
-
-    take:
-      normalizedLimit,
-
-    select:
-      citySelect,
-  });
+export async function getCitiesByCountry(countryCode: string, limit = DEFAULT_POPULAR_LIMIT): Promise<CityRepositoryRecord[]> {
+  const code = normalizeCountryCode(countryCode);
+  if (code.length !== 2) return [];
+  return queryCities('co.iso2 = $1', [code], normalizeLimit(limit, DEFAULT_POPULAR_LIMIT));
 }
 
-/**
- * Recherche avancée utilisée par TimeInOne.
- *
- * Les groupes sont fusionnés dans cet ordre :
- *
- * 1. nom exact ;
- * 2. nom ASCII exact ;
- * 3. slug exact ;
- * 4. nom commençant par la requête ;
- * 5. nom ASCII commençant par la requête ;
- * 6. code ou nom du pays ;
- * 7. fuseau horaire ;
- * 8. correspondance partielle générale.
- *
- * Dans chaque groupe, les villes les plus
- * peuplées sont prioritaires.
- */
-export async function searchCities(
-  query: string,
-  limit =
-    DEFAULT_SEARCH_LIMIT,
-): Promise<
-  CityRepositoryRecord[]
-> {
-  const prisma =
-  await getPrismaAsync();
-  const normalizedQuery =
-    normalizeSearchQuery(
-      query,
-    );
+export async function getCitiesByTimezone(timezoneName: string, limit = DEFAULT_POPULAR_LIMIT): Promise<CityRepositoryRecord[]> {
+  const name = normalizeSearchQuery(timezoneName);
+  if (!name) return [];
+  return queryCities('LOWER(tz.name) = LOWER($1)', [name], normalizeLimit(limit, DEFAULT_POPULAR_LIMIT));
+}
 
-  if (
-    normalizedQuery.length <
-    2
-  ) {
-    return [];
-  }
+// Escape user-supplied LIKE metacharacters so search behaves like Prisma's
+// startsWith/contains, rather than treating % and _ as wildcards.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
 
-  const normalizedLimit =
-    normalizeLimit(
-      limit,
-      DEFAULT_SEARCH_LIMIT,
-    );
+export async function searchCities(query: string, limit = DEFAULT_SEARCH_LIMIT): Promise<CityRepositoryRecord[]> {
+  const q = normalizeSearchQuery(query);
+  if (q.length < 2) return [];
+  const normalizedLimit = normalizeLimit(limit, DEFAULT_SEARCH_LIMIT);
+  const expanded = Math.min(normalizedLimit * SEARCH_EXPANSION_FACTOR, MAX_LIST_LIMIT);
+  const ascii = removeDiacritics(q);
+  const slug = normalizeSlug(q);
+  const upper = q.toUpperCase();
+  const prefixQ = `${escapeLike(q)}%`;
+  const prefixAscii = `${escapeLike(ascii)}%`;
+  const containsQ = `%${escapeLike(q)}%`;
+  const containsAscii = `%${escapeLike(ascii)}%`;
+  const containsSlug = `%${escapeLike(slug)}%`;
 
-  const expandedLimit =
-    Math.min(
-      normalizedLimit *
-        SEARCH_EXPANSION_FACTOR,
-      MAX_LIST_LIMIT,
-    );
-
-  const asciiQuery =
-    removeDiacritics(
-      normalizedQuery,
-    );
-
-  const slugQuery =
-    normalizeSlug(
-      normalizedQuery,
-    );
-
-  const upperQuery =
-    normalizedQuery
-      .toUpperCase();
-
-  const commonOrderBy = [
-    {
-      population:
-        "desc" as const,
-    },
-    {
-      name:
-        "asc" as const,
-    },
-    {
-      geonameId:
-        "asc" as const,
-    },
-  ];
-
-  const [
-    exactNameCities,
-    exactAsciiNameCities,
-    exactSlugCities,
-    prefixNameCities,
-    prefixAsciiNameCities,
-    countryCities,
-    timezoneCities,
-    partialCities,
-  ] = await Promise.all([
-    /*
-     * 1. Nom exact.
-     */
-    prisma.city.findMany({
-      where: {
-        name: {
-          equals:
-            normalizedQuery,
-
-          mode:
-            "insensitive",
-        },
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 2. Nom ASCII exact.
-     *
-     * Permet par exemple :
-     * Sao Paulo → São Paulo
-     */
-    prisma.city.findMany({
-      where: {
-        asciiName: {
-          equals:
-            asciiQuery,
-
-          mode:
-            "insensitive",
-        },
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 3. Slug exact.
-     */
-    prisma.city.findMany({
-      where: {
-        slug:
-          slugQuery,
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 4. Nom commençant par la requête.
-     */
-    prisma.city.findMany({
-      where: {
-        name: {
-          startsWith:
-            normalizedQuery,
-
-          mode:
-            "insensitive",
-        },
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 5. Nom ASCII commençant par la requête.
-     */
-    prisma.city.findMany({
-      where: {
-        asciiName: {
-          startsWith:
-            asciiQuery,
-
-          mode:
-            "insensitive",
-        },
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 6. Recherche par pays.
-     *
-     * Exemples :
-     * France
-     * Morocco
-     * FR
-     * MA
-     */
-    prisma.city.findMany({
-      where: {
-        country: {
-          is: {
-            OR: [
-              {
-                name: {
-                  equals:
-                    normalizedQuery,
-
-                  mode:
-                    "insensitive",
-                },
-              },
-              {
-                name: {
-                  startsWith:
-                    normalizedQuery,
-
-                  mode:
-                    "insensitive",
-                },
-              },
-              {
-                iso2:
-                  upperQuery,
-              },
-              {
-                iso3:
-                  upperQuery,
-              },
-            ],
-          },
-        },
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 7. Recherche par fuseau horaire.
-     *
-     * Exemples :
-     * Europe/Paris
-     * Europe
-     * Casablanca
-     */
-    prisma.city.findMany({
-      where: {
-        timezone: {
-          is: {
-            name: {
-              contains:
-                normalizedQuery,
-
-              mode:
-                "insensitive",
-            },
-          },
-        },
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
-
-    /*
-     * 8. Correspondance partielle générale.
-     */
-    prisma.city.findMany({
-      where: {
-        OR: [
-          {
-            name: {
-              contains:
-                normalizedQuery,
-
-              mode:
-                "insensitive",
-            },
-          },
-          {
-            asciiName: {
-              contains:
-                asciiQuery,
-
-              mode:
-                "insensitive",
-            },
-          },
-          {
-            slug: {
-              contains:
-                slugQuery,
-            },
-          },
-          {
-            country: {
-              is: {
-                name: {
-                  contains:
-                    normalizedQuery,
-
-                  mode:
-                    "insensitive",
-                },
-              },
-            },
-          },
-          {
-            timezone: {
-              is: {
-                name: {
-                  contains:
-                    normalizedQuery,
-
-                  mode:
-                    "insensitive",
-                },
-              },
-            },
-          },
-        ],
-      },
-
-      orderBy:
-        commonOrderBy,
-
-      take:
-        expandedLimit,
-
-      select:
-        citySelect,
-    }),
+  const groups = await Promise.all([
+    queryCities('c.name ILIKE $1', [q], expanded),
+    queryCities('c."asciiName" ILIKE $1', [ascii], expanded),
+    queryCities('c.slug = $1', [slug], expanded),
+    queryCities('c.name ILIKE $1', [prefixQ], expanded),
+    queryCities('c."asciiName" ILIKE $1', [prefixAscii], expanded),
+    queryCities('(co.name ILIKE $1 OR co.name ILIKE $2 OR co.iso2 = $3 OR co.iso3 = $3)',
+      [q, prefixQ, upper], expanded),
+    queryCities('tz.name ILIKE $1', [containsQ], expanded),
+    queryCities(`(c.name ILIKE $1 OR c."asciiName" ILIKE $2 OR c.slug LIKE $3
+      OR co.name ILIKE $1 OR tz.name ILIKE $1)`,
+      [containsQ, containsAscii, containsSlug], expanded),
   ]);
-
-  return deduplicateCitiesById(
-    [
-      exactNameCities,
-      exactAsciiNameCities,
-      exactSlugCities,
-      prefixNameCities,
-      prefixAsciiNameCities,
-      countryCities,
-      timezoneCities,
-      partialCities,
-    ],
-    normalizedLimit,
-  );
+  return deduplicateCitiesById(groups, normalizedLimit);
 }
 
-export async function getRelatedCities(
-  cityId: number,
-  limit = 6,
-): Promise<
-  CityRepositoryRecord[]
-> {
-  const prisma =
-  await getPrismaAsync();
-  const currentCity =
-    await getCityById(
-      cityId,
-    );
-
-  if (!currentCity) {
-    return [];
-  }
-
-  const normalizedLimit =
-    normalizeLimit(
-      limit,
-      6,
-    );
-
-  const sameCountryCities =
-    await prisma.city.findMany({
-      where: {
-        id: {
-          not:
-            currentCity.id,
-        },
-
-        countryId:
-          currentCity.country.id,
-      },
-
-      orderBy: [
-        {
-          population:
-            "desc",
-        },
-        {
-          name:
-            "asc",
-        },
-        {
-          geonameId:
-            "asc",
-        },
-      ],
-
-      take:
-        normalizedLimit,
-
-      select:
-        citySelect,
-    });
-
-  if (
-    sameCountryCities.length >=
-    normalizedLimit
-  ) {
-    return sameCountryCities;
-  }
-
-  const remainingLimit =
-    normalizedLimit -
-    sameCountryCities.length;
-
-  const excludedIds = [
-    currentCity.id,
-
-    ...sameCountryCities.map(
-      (
-    city:
-      CityRepositoryRecord,
-  ) =>
-    city.id,
-    ),
-  ];
-
-  const sameTimezoneCities =
-    await prisma.city.findMany({
-      where: {
-        id: {
-          notIn:
-            excludedIds,
-        },
-
-        timezoneId:
-          currentCity.timezone.id,
-      },
-
-      orderBy: [
-        {
-          population:
-            "desc",
-        },
-        {
-          name:
-            "asc",
-        },
-        {
-          geonameId:
-            "asc",
-        },
-      ],
-
-      take:
-        remainingLimit,
-
-      select:
-        citySelect,
-    });
-
-  return [
-    ...sameCountryCities,
-    ...sameTimezoneCities,
-  ];
+export async function getRelatedCities(cityId: number, limit = 6): Promise<CityRepositoryRecord[]> {
+  const current = await getCityById(cityId);
+  if (!current) return [];
+  const normalizedLimit = normalizeLimit(limit, 6);
+  const sameCountry = await queryCities('c.id <> $1 AND c."countryId" = $2',
+    [current.id, current.country.id], normalizedLimit);
+  if (sameCountry.length >= normalizedLimit) return sameCountry;
+  const excludedIds = [current.id, ...sameCountry.map((city) => city.id)];
+  const sameTimezone = await queryCities(
+    'NOT (c.id = ANY($1::int[])) AND c."timezoneId" = $2',
+    [excludedIds, current.timezone.id], normalizedLimit - sameCountry.length);
+  return [...sameCountry, ...sameTimezone];
 }
 
 export const cityRepository = {
   getCityById,
   getCityByGeonameId,
-
   getCityBySlug,
   getCityBySlugAndCountryCode,
-
   getPopularCities,
   getCitiesByCountry,
   getCitiesByTimezone,
-
   searchCities,
   getRelatedCities,
 };

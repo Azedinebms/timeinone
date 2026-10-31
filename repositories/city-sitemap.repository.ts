@@ -1,8 +1,7 @@
+
 import "server-only";
 
-import {
-  getPrismaAsync,
-} from "@/lib/db/prisma";
+import { getNeon } from "@/lib/db/neon";
 
 export type CitySitemapRecord = {
   slug: string;
@@ -17,12 +16,15 @@ export type CitySitemapRecord = {
    COUNT CITIES FOR SITEMAP
 ========================================================= */
 
-export async function countCitiesForSitemap():
-  Promise<number> {
-  const prisma =
-    await getPrismaAsync();
+export async function countCitiesForSitemap(): Promise<number> {
+  const sql = await getNeon();
 
-  return prisma.city.count();
+  const rows = await sql`
+    SELECT COUNT(*)::int AS total
+    FROM cities
+  `;
+
+  return Number(rows[0]?.total ?? 0);
 }
 
 /* =========================================================
@@ -33,34 +35,47 @@ export async function getCitiesForSitemap(
   offset: number,
   limit: number,
 ): Promise<CitySitemapRecord[]> {
-  const prisma =
-    await getPrismaAsync();
+  const sql = await getNeon();
 
-  return prisma.city.findMany({
-    skip:
-      offset,
+  const safeOffset = Math.max(
+    0,
+    Math.floor(Number.isFinite(offset) ? offset : 0),
+  );
 
-    take:
-      limit,
+  const safeLimit = Math.max(
+    0,
+    Math.floor(Number.isFinite(limit) ? limit : 0),
+  );
 
-    orderBy: {
-      id:
-        "asc",
+  if (safeLimit === 0) {
+    return [];
+  }
+
+  const rows = await sql`
+    SELECT
+      city.slug,
+      city."updatedAt",
+      country.iso2 AS "countryIso2"
+
+    FROM cities AS city
+
+    INNER JOIN countries AS country
+      ON country.id = city."countryId"
+
+    ORDER BY city.id ASC
+
+    LIMIT ${safeLimit}
+    OFFSET ${safeOffset}
+  `;
+
+  return rows.map((row) => ({
+    slug: String(row.slug),
+    updatedAt:
+      row.updatedAt instanceof Date
+        ? row.updatedAt
+        : new Date(String(row.updatedAt)),
+    country: {
+      iso2: String(row.countryIso2),
     },
-
-    select: {
-      slug:
-        true,
-
-      updatedAt:
-        true,
-
-      country: {
-        select: {
-          iso2:
-            true,
-        },
-      },
-    },
-  });
+  }));
 }

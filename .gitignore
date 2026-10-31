@@ -44,3 +44,20 @@ next-env.d.ts
 
 .dev.vars
 .dev.vars.*
+
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# OpenNext / Cloudflare
+.open-next/
+.wrangler/
+
+# Environment variables
+.env
+.env.*
+!.env.example
