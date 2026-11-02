@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useState,
 } from "react";
 
@@ -47,6 +48,60 @@ export default function TimeDifferenceTool({
     useState<CityOption>(
       initialToCity,
     );
+
+    useEffect(() => {
+  let cancelled = false;
+
+  const detectVisitorCity = async () => {
+    try {
+      // Identifier la ville du visiteur
+      const locationResponse = await fetch(
+        "https://ipwho.is/",
+      );
+
+      if (!locationResponse.ok) return;
+
+      const location = await locationResponse.json();
+
+      if (
+        location.success !== true ||
+        !location.city ||
+        !location.country_code
+      ) {
+        return;
+      }
+
+      // Retrouver la ville dans TimeInOne
+      const params = new URLSearchParams({
+        city: location.city,
+        countryCode: location.country_code,
+      });
+
+      const response = await fetch(
+        `/api/visitor-city?${params.toString()}`,
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (!cancelled && data.city?.id) {
+        setFromCity(data.city);
+      }
+    } catch (error) {
+      console.error(
+        "[Time Difference] Visitor city detection failed:",
+        error,
+      );
+    }
+  };
+
+  void detectVisitorCity();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   const swapCities =
     () => {
